@@ -57,7 +57,7 @@ func (u *User) Delete() int64 {
 	return count
 }
 
-func FindUserById(id int) (u User) {
+func FindUserById(id int64) (u User) {
 	db, err := sql.Open("sqlite3", "./"+DATABASE_NAME+".db")
 	helpers.HandleError(err)
 
@@ -90,4 +90,12 @@ func FindUserByCreds(nick string, pass string) (u User, e error) {
 
 	db.Close()
 	return u, nil
+}
+
+func CreateUser(nickname string, password string) (u User, e error) {
+	user := User{nick: nickname, pass: password, gcm: "0"}
+	id := user.Save()
+	user = FindUserById(id)
+
+	return user, nil
 }
