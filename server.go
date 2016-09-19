@@ -8,6 +8,7 @@ import (
 	// "regexp"
 	// "github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/models"
+	"github.com/TopHatCroat/CryptoChat-server/database"
 )
 
 var (
@@ -66,4 +67,5 @@ func main() {
 	http.HandleFunc("/register/", registerHandler)
 	http.HandleFunc("/", sendHandler)
 	http.ListenAndServe(":8080", nil)
+	database.CloseDatabase()
 }

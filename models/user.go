@@ -1,13 +1,11 @@
 package models
 
 import (
-	"database/sql"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/TopHatCroat/CryptoChat-server/database"
 )
 
 var (
-	DATABASE_NAME = "baza"
 )
 
 type Entity interface {
@@ -17,34 +15,30 @@ type Entity interface {
 
 type User struct {
 	id   int64
-	nick string
-	pass string
+	username string
+	password string
 	gcm  string
 }
 
 func (u *User) Save() int64 {
-	db, err := sql.Open("sqlite3", "./"+DATABASE_NAME+".db")
-	helpers.HandleError(err)
-
+	db := database.GetDatabase();
 	if u.id == 0 {
-		preparedStatement, err := db.Prepare("INSERT INTO users(nick, pass, gcm) VALUES(?,?,?)")
+		preparedStatement, err := db.Prepare("INSERT INTO users(username, password, gcm) VALUES(?,?,?)")
 		helpers.HandleError(err)
-		result, err := preparedStatement.Exec(u.nick, u.pass, u.gcm)
+		result, err := preparedStatement.Exec(u.username, u.password, u.gcm)
 		helpers.HandleError(err)
 		u.id, _ = result.LastInsertId()
 	} else {
-		preparedStatement, err := db.Prepare("UPDATE users set nick = ?, pass = ?, gcm = ? WHERE id = ?")
+		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ? WHERE id = ?")
 		helpers.HandleError(err)
-		_, err = preparedStatement.Exec(u.nick, u.pass, u.gcm, u.id)
+		_, err = preparedStatement.Exec(u.username, u.password, u.gcm, u.id)
 		helpers.HandleError(err)
 	}
-	db.Close()
 	return u.id
 }
 
 func (u *User) Delete() int64 {
-	db, err := sql.Open("sqlite3", "./"+DATABASE_NAME+".db")
-	helpers.HandleError(err)
+	db := database.GetDatabase();
 
 	preparedStatement, err := db.Prepare("DELETE FROM users WHERE id = ?")
 	helpers.HandleError(err)
@@ -58,42 +52,38 @@ func (u *User) Delete() int64 {
 }
 
 func FindUserById(id int64) (u User) {
-	db, err := sql.Open("sqlite3", "./"+DATABASE_NAME+".db")
-	helpers.HandleError(err)
+	db := database.GetDatabase();
 
 	preparedStatement, err := db.Prepare("SELECT * FROM users WHERE id = ?")
 	helpers.HandleError(err)
 	row, err := preparedStatement.Query(id)
 
 	row.Next()
-	err = row.Scan(&u.id, &u.nick, &u.pass, &u.gcm)
+	err = row.Scan(&u.id, &u.username, &u.password, &u.gcm)
 	helpers.HandleError(err)
 
-	db.Close()
 	return u
 }
 
-func FindUserByCreds(nick string, pass string) (u User, e error) {
-	db, err := sql.Open("sqlite3", "./"+DATABASE_NAME+".db")
-	helpers.HandleError(err)
+func FindUserByCreds(username string, password string) (u User, e error) {
+	db := database.GetDatabase();
 
-	preparedStatement, err := db.Prepare("SELECT * FROM users WHERE nick = ? AND pass = ?")
+	preparedStatement, err := db.Prepare("SELECT * FROM users WHERE username = ? AND password = ?")
 	helpers.HandleError(err)
-	row, err := preparedStatement.Query(nick, pass)
+	row, err := preparedStatement.Query(username, password)
 	if err != nil {
 		return u, err
 	}
 
 	row.Next()
-	err = row.Scan(&u.id, &u.nick, &u.pass, &u.gcm)
+	err = row.Scan(&u.id, &u.username, &u.password, &u.gcm)
 	helpers.HandleError(err)
 
-	db.Close()
 	return u, nil
 }
 
-func CreateUser(nickname string, password string) (u User, e error) {
-	user := User{nick: nickname, pass: password, gcm: "0"}
+func CreateUser(nick string, pass string) (u User, e error) {
+	user := User{username: nick, password: pass, gcm: "0"}
 	id := user.Save()
 	user = FindUserById(id)
 
