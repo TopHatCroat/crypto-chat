@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	// "regexp"
-	// "github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/database"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
 )
 
 var (
@@ -48,10 +48,12 @@ func loginHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) {
-	username := req.URL.Query().Get(USERNAME)
-	password := req.URL.Query().Get(PASSWORD)
+	decoder := json.NewDecoder(req.Body)
+	var user models.User
+	err := decoder.Decode(&user)
+	helpers.HandleError(err)
 
-	user, err := models.CreateUser(username, password)
+	user, err = models.CreateUser(user.Username, user.Password)
 	if err != nil {
 		response, _ := json.Marshal(WRONG_CREDS_ERROR)
 		fmt.Fprintf(rw, string(response))

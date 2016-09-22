@@ -14,10 +14,10 @@ type Entity interface {
 }
 
 type User struct {
-	id   int64
-	username string
-	password string
-	gcm  string
+	id       int64
+	Username string
+	Password string
+	Gcm      string
 }
 
 func (u *User) Save() int64 {
@@ -25,13 +25,13 @@ func (u *User) Save() int64 {
 	if u.id == 0 {
 		preparedStatement, err := db.Prepare("INSERT INTO users(username, password, gcm) VALUES(?,?,?)")
 		helpers.HandleError(err)
-		result, err := preparedStatement.Exec(u.username, u.password, u.gcm)
+		result, err := preparedStatement.Exec(u.Username, u.Password, u.Gcm)
 		helpers.HandleError(err)
 		u.id, _ = result.LastInsertId()
 	} else {
 		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ? WHERE id = ?")
 		helpers.HandleError(err)
-		_, err = preparedStatement.Exec(u.username, u.password, u.gcm, u.id)
+		_, err = preparedStatement.Exec(u.Username, u.Password, u.Gcm, u.id)
 		helpers.HandleError(err)
 	}
 	return u.id
@@ -59,7 +59,7 @@ func FindUserById(id int64) (u User) {
 	row, err := preparedStatement.Query(id)
 
 	row.Next()
-	err = row.Scan(&u.id, &u.username, &u.password, &u.gcm)
+	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
 	helpers.HandleError(err)
 
 	return u
@@ -76,14 +76,14 @@ func FindUserByCreds(username string, password string) (u User, e error) {
 	}
 
 	row.Next()
-	err = row.Scan(&u.id, &u.username, &u.password, &u.gcm)
+	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
 	helpers.HandleError(err)
 
 	return u, nil
 }
 
 func CreateUser(nick string, pass string) (u User, e error) {
-	user := User{username: nick, password: pass, gcm: "0"}
+	user := User{Username: nick, Password: pass, Gcm: "0"}
 	id := user.Save()
 	user = FindUserById(id)
 
