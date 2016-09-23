@@ -9,6 +9,9 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
+	"os"
+	"syscall"
+	"os/signal"
 )
 
 var (
@@ -48,6 +51,7 @@ func loginHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) {
+
 	decoder := json.NewDecoder(req.Body)
 	var user models.User
 	err := decoder.Decode(&user)
@@ -65,9 +69,25 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		fmt.Println()
+		fmt.Println(sig)
+		database.CloseDatabase()
+		fmt.Println("SecureChat server closed...")
+		os.Exit(0)
+	}()
+
+	database.GetDatabase()
 	http.HandleFunc("/login/", loginHandler)
 	http.HandleFunc("/register/", registerHandler)
 	http.HandleFunc("/", sendHandler)
 	http.ListenAndServe(":8080", nil)
+
+
+
+
 	database.CloseDatabase()
 }
