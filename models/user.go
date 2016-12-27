@@ -61,7 +61,7 @@ func FindUserById(id int64) (u User) {
 	row.Next()
 	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
 	helpers.HandleError(err)
-
+	row.Close()
 	return u
 }
 
@@ -78,7 +78,7 @@ func FindUserByCreds(username string, password string) (u User, e error) {
 	row.Next()
 	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
 	helpers.HandleError(err)
-
+	row.Close()
 	return u, nil
 }
 
@@ -86,6 +86,5 @@ func CreateUser(nick string, pass string) (u User, e error) {
 	user := User{Username: nick, Password: pass, Gcm: "0"}
 	id := user.Save()
 	user = FindUserById(id)
-
 	return user, nil
 }

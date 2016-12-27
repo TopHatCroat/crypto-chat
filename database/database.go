@@ -24,9 +24,14 @@ func GetDatabase() (*sql.DB) {
 	return db
 
 }
+
 func openDatabase() {
 	db, err = sql.Open("sqlite3", DATABASE_PATH);
 	helpers.HandleError(err)
+}
+
+func nesr() {
+
 }
 
 func createDatabase() {
