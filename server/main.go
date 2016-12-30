@@ -2,10 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	// "errors"
 	"fmt"
 	"net/http"
-	// "regexp"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
@@ -14,7 +12,6 @@ import (
 	"os/signal"
 	"net"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
-	//"os/user"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"log"
 )
@@ -41,29 +38,68 @@ func loginHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) {
-
 	decoder := json.NewDecoder(req.Body)
-	var connectRequest protocol.ConnectRequest
-	err := decoder.Decode(&connectRequest)
-	helpers.HandleServerError(err, rw)
-
-	println(connectRequest.Password, connectRequest.UserName)
-	var user models.User
-	user, err = models.CreateUser(connectRequest.UserName, connectRequest.Password)
-
-	encoder := json.NewEncoder(rw)
-
-	if err != nil {
-		//encoder.Encode(map[string]string {"error": constants.WRONG_CREDS_ERROR})
-		helpers.HandleServerError(err, rw)
-		return
+	var msg json.RawMessage
+	fullMsg := protocol.CompleteMessage{
+		Content: &msg,
+	}
+	if err := decoder.Decode(&fullMsg); err != nil {
+		log.Fatal(err)
 	}
 
-	var connectResponse protocol.ConnectResponse
-	connectResponse.Type = constants.LOGIN_SUCCESS
-	connectResponse.Token = user.Username
+	//decoder := json.NewDecoder(req.Body)
+	//var fullMsg protocol.CompleteMessage
+	//err := decoder.Decode(&fullMsg)
+	//helpers.HandleServerError(err, rw)
 
-	encoder.Encode(connectResponse)
+	if fullMsg.Type == "R" {
+		var connectRequest protocol.ConnectRequest
+		json.Unmarshal(msg, &connectRequest)
+		println("Recieved register request")
+		println(connectRequest.UserName)
+		println(connectRequest.Password)
+		var user models.User
+		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password)
+		helpers.HandleServerError(err, rw)
+
+		//encoder := json.NewEncoder(rw)
+		//
+		//if err != nil {
+		//	//encoder.Encode(map[string]string {"error": constants.WRONG_CREDS_ERROR})
+		//	helpers.HandleServerError(err, rw)
+		//	return
+		//}
+
+		var connectResponse protocol.ConnectResponse
+		connectResponse.Type = constants.REGISTER_SUCCESS
+		connectResponse.Token = user.Username
+
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(connectResponse)
+	}
+
+	if fullMsg.Type == "L" {
+		var connectRequest protocol.ConnectRequest
+		println("Recieved login request")
+		var user models.User
+		user, err := models.FindUserByCreds(connectRequest.UserName, connectRequest.Password)
+		helpers.HandleServerError(err, rw)
+		//encoder := json.NewEncoder(rw)
+		//
+		//if err != nil {
+		//	//encoder.Encode(map[string]string {"error": constants.WRONG_CREDS_ERROR})
+		//	helpers.HandleServerError(err, rw)
+		//	return
+		//}
+
+		var connectResponse protocol.ConnectResponse
+		connectResponse.Type = constants.LOGIN_SUCCESS
+		connectResponse.Token = user.Username
+
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(connectResponse)
+	}
+
 }
 
 func handleClient(conn net.Conn) {

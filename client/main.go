@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"flag"
-	//"net"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"net/http"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
@@ -18,6 +17,7 @@ import (
 
 var (
 	registerOption = flag.Bool("register", false, "registers with server using username and password specified")
+	loginOption = flag.Bool("login", false, "logs in on the server using username and password")
 )
 
 func main() {
@@ -38,16 +38,23 @@ func main() {
 
 
 	if *registerOption {
-		//conn.Write([]byte("lalala"))
 		var userName = flag.Arg(0)
 		var password = flag.Arg(1)
 		var connectRequest protocol.ConnectRequest
 
 		connectRequest.UserName = userName
 		connectRequest.Password = password
-
+		var fullMsg protocol.CompleteMessage
+		fullMsg.Type = "R"
+		protocol.ConstructMetaData(&fullMsg)
+		fullMsg.Content = connectRequest
 		buffer := new(bytes.Buffer)
-		json.NewEncoder(buffer).Encode(connectRequest)
+		json.NewEncoder(buffer).Encode(fullMsg)
+
+		if somthing, ok := fullMsg.Content.(protocol.ConnectRequest); ok {
+			println(somthing.Password)
+			println(somthing.UserName)
+		}
 
 		resp, err := http.Post("http://localhost:8080/register", "application/json", buffer)
 		//defer resp.Close()
@@ -59,12 +66,39 @@ func main() {
 		err = json.Unmarshal(body, &connectResponse)
 
 		//TODO: find out why this doesn't work
-		//json.NewDecoder(resp).Decode(&connectRequest)
+		//json.NewDecoder(resp.Body).Decode(&connectRequest)
 
 
 		println(connectResponse.Token)
 		println(connectResponse.Type)
+	}
 
+	if *loginOption {
+		var userName = flag.Arg(0)
+		var password = flag.Arg(1)
+		var connectRequest protocol.ConnectRequest
+
+		connectRequest.UserName = userName
+		connectRequest.Password = password
+
+		var fullMsg protocol.CompleteMessage
+		fullMsg.Type = "L"
+		protocol.ConstructMetaData(&fullMsg)
+		fullMsg.Content = connectRequest
+		buffer := new(bytes.Buffer)
+		json.NewEncoder(buffer).Encode(fullMsg)
+
+		resp, err := http.Post("http://localhost:8080/register", "application/json", buffer)
+		//defer resp.Close()
+		helpers.HandleError(err)
+
+		var fullMsgResponse protocol.CompleteMessage
+		body, err := ioutil.ReadAll(resp.Body)
+		helpers.HandleError(err)
+		err = json.Unmarshal(body, &fullMsgResponse)
+
+		println(fullMsgResponse.Meta.SentAt)
+		println(fullMsgResponse.Content)
 	}
 
 }

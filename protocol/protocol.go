@@ -5,30 +5,44 @@ import (
 	//"github.com/TopHatCroat/CryptoChat-server/constants"
 	//"fmt"
 )
+import (
+	"time"
+)
+
+type CompleteMessage struct {
+	Type 	 string 		`json: "type"`
+	Content  interface{}	`json: "content"`
+	Meta 	 Meta 			`json: "metadata`
+}
 
 type Message struct {
-	Sender   []byte
-	Reciever []byte
-	Content  []byte
+	Sender   []byte	`json: "sender"`
+	Reciever []byte	`json: "reciever"`
+	Content  []byte `json: "content"`
 }
 
 type Meta struct {
-	SentAt   int64
-	Hash 	 []byte
+	SentAt   int64	`json: "sent_at"`
+	Hash 	 []byte `json: "hash"`
 }
 
 type ConnectRequest struct {
-	UserName string
-	Password string
+	UserName string `json: "user_name"`
+	Password string `json: "pass_hash"`
 }
 
 type ConnectResponse struct {
-	Type 	 string
-	Token    string
+	Type 	 string `json: "type"`
+	Token    string `json: "token"`
 }
 
 func ResolveRequest(data []byte) (returnData []byte, err error) {
 	returnData = data
 	return data, err
+}
+
+func ConstructMetaData(fullMsg *CompleteMessage) () {
+	timeStamp := time.Now();
+	fullMsg.Meta.SentAt = timeStamp.UnixNano()
 }
 
