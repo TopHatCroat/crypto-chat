@@ -51,11 +51,6 @@ func main() {
 		buffer := new(bytes.Buffer)
 		json.NewEncoder(buffer).Encode(fullMsg)
 
-		if somthing, ok := fullMsg.Content.(protocol.ConnectRequest); ok {
-			println(somthing.Password)
-			println(somthing.UserName)
-		}
-
 		resp, err := http.Post("http://localhost:8080/register", "application/json", buffer)
 		//defer resp.Close()
 		helpers.HandleError(err)
@@ -65,12 +60,15 @@ func main() {
 		helpers.HandleError(err)
 		err = json.Unmarshal(body, &connectResponse)
 
+		if connectResponse.Error != "" {
+			fmt.Println(connectResponse.Error)
+		} else {
+			fmt.Println(connectResponse.Type)
+		}
+
 		//TODO: find out why this doesn't work
 		//json.NewDecoder(resp.Body).Decode(&connectRequest)
 
-
-		println(connectResponse.Token)
-		println(connectResponse.Type)
 	}
 
 	if *loginOption {
@@ -92,13 +90,17 @@ func main() {
 		//defer resp.Close()
 		helpers.HandleError(err)
 
-		var fullMsgResponse protocol.CompleteMessage
+		var connectResponse protocol.ConnectResponse
 		body, err := ioutil.ReadAll(resp.Body)
 		helpers.HandleError(err)
-		err = json.Unmarshal(body, &fullMsgResponse)
+		err = json.Unmarshal(body, &connectResponse)
 
-		println(fullMsgResponse.Meta.SentAt)
-		println(fullMsgResponse.Content)
+		if connectResponse.Error != "" {
+			fmt.Println(connectResponse.Error)
+		} else {
+			fmt.Println(connectResponse.Type)
+		}
+
 	}
 
 }

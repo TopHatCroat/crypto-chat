@@ -3,6 +3,8 @@ package models
 import (
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/database"
+	"errors"
+	"github.com/TopHatCroat/CryptoChat-server/constants"
 )
 
 var (
@@ -77,12 +79,33 @@ func FindUserByCreds(username string, password string) (u User, e error) {
 
 	row.Next()
 	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
-	helpers.HandleError(err)
-	row.Close()
+	defer row.Close()
+	if err != nil {
+		return u, errors.New(constants.WRONG_CREDS_ERROR)
+	}
 	return u, nil
 }
 
+func usernameExists(username string) (exists bool) {
+	db := database.GetDatabase()
+	preparedStatement, err := db.Prepare("SELECT COUNT(*) FROM users WHERE username = ?")
+	helpers.HandleError(err)
+	row, err := preparedStatement.Query(username)
+	defer row.Close()
+	row.Next()
+	var count int
+	err = row.Scan(&count)
+	if count == 0 {
+		return false
+	} else {
+		return true
+	}
+}
+
 func CreateUser(nick string, pass string) (u User, e error) {
+	if usernameExists(nick) {
+		return u, errors.New(constants.ALREADY_EXISTS)
+	}
 	user := User{Username: nick, Password: pass, Gcm: "0"}
 	id := user.Save()
 	user = FindUserById(id)

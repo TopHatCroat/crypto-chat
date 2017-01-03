@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/database"
-	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"os"
 	"syscall"
 	"os/signal"
@@ -16,59 +15,57 @@ import (
 	"log"
 )
 
-func sendHandler(rw http.ResponseWriter, req *http.Request) {
+type appHandler func(http.ResponseWriter, *http.Request) *appError
+
+type appError struct {
+	Error error
+	Message string
+	Code int
+}
+
+func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 	response, _ := json.Marshal(req.URL.Path[1:])
 	fmt.Fprintf(rw, string(response))
+
+	return nil
 }
 
-func loginHandler(rw http.ResponseWriter, req *http.Request) {
+func loginHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	username := req.URL.Query().Get(constants.USERNAME)
 	password := req.URL.Query().Get(constants.PASSWORD)
 
 	_, err := models.FindUserByCreds(username, password)
 	if err != nil {
-		response, _ := json.Marshal(constants.WRONG_CREDS_ERROR)
-		fmt.Fprintf(rw, string(response))
-		return
+		return &appError{err, "whops", 500}
 	}
 
 	response, _ := json.Marshal(map[string]interface{}{"msg": constants.LOGIN_SUCCESS})
 	fmt.Fprintf(rw, string(response))
+
+	return nil
 }
 
-func registerHandler(rw http.ResponseWriter, req *http.Request) {
+func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	decoder := json.NewDecoder(req.Body)
 	var msg json.RawMessage
 	fullMsg := protocol.CompleteMessage{
 		Content: &msg,
 	}
 	if err := decoder.Decode(&fullMsg); err != nil {
-		log.Fatal(err)
+		return &appError{err, "lol", 500}
 	}
 
-	//decoder := json.NewDecoder(req.Body)
-	//var fullMsg protocol.CompleteMessage
-	//err := decoder.Decode(&fullMsg)
-	//helpers.HandleServerError(err, rw)
 
 	if fullMsg.Type == "R" {
 		var connectRequest protocol.ConnectRequest
+		log.Println("Recieved register request")
 		json.Unmarshal(msg, &connectRequest)
-		println("Recieved register request")
-		println(connectRequest.UserName)
-		println(connectRequest.Password)
 		var user models.User
 		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password)
-		helpers.HandleServerError(err, rw)
-
-		//encoder := json.NewEncoder(rw)
-		//
-		//if err != nil {
-		//	//encoder.Encode(map[string]string {"error": constants.WRONG_CREDS_ERROR})
-		//	helpers.HandleServerError(err, rw)
-		//	return
-		//}
+		if err != nil {
+			return &appError{err, "Something went tits up", 500}
+		}
 
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.REGISTER_SUCCESS
@@ -80,10 +77,13 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) {
 
 	if fullMsg.Type == "L" {
 		var connectRequest protocol.ConnectRequest
-		println("Recieved login request")
+		log.Println("Recieved login request")
+		json.Unmarshal(msg, &connectRequest)
 		var user models.User
 		user, err := models.FindUserByCreds(connectRequest.UserName, connectRequest.Password)
-		helpers.HandleServerError(err, rw)
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
 		//encoder := json.NewEncoder(rw)
 		//
 		//if err != nil {
@@ -100,6 +100,7 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) {
 		encoder.Encode(connectResponse)
 	}
 
+	return nil
 }
 
 func handleClient(conn net.Conn) {
@@ -125,6 +126,14 @@ func handleClient(conn net.Conn) {
 	}
 }
 
+func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if err := fn(rw, req); err != nil {
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(map[string]string {"error": err.Message})
+		//http.Error(rw, err.Message, err.Code)
+	}
+}
+
 func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -138,9 +147,9 @@ func main() {
 	}()
 
 	database.GetDatabase()
-	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/register", registerHandler)
-	http.HandleFunc("/", sendHandler)
+	//http.Handle("/login", appHandler(loginHandler))
+	http.Handle("/register", appHandler(registerHandler))
+	//http.Handle("/", appHandler(sendHandler))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
 

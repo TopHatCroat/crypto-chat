@@ -34,6 +34,11 @@ type ConnectRequest struct {
 type ConnectResponse struct {
 	Type 	 string `json: "type"`
 	Token    string `json: "token"`
+	Error 	 string `json: "error"`
+}
+
+type ErrorResponse struct {
+	Error string 	`json: "error"`
 }
 
 func ResolveRequest(data []byte) (returnData []byte, err error) {
