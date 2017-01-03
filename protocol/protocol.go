@@ -1,12 +1,14 @@
 package protocol
 
 import (
-	//"encoding/json"
-	//"github.com/TopHatCroat/CryptoChat-server/constants"
-	//"fmt"
-)
-import (
 	"time"
+	"crypto/rand"
+	"golang.org/x/crypto/nacl/box"
+)
+
+
+const (
+	KEY_SIZE = 32
 )
 
 type CompleteMessage struct {
@@ -27,8 +29,9 @@ type Meta struct {
 }
 
 type ConnectRequest struct {
-	UserName string `json: "user_name"`
-	Password string `json: "pass_hash"`
+	UserName 	string `json: "user_name"`
+	Password 	string `json: "pass_hash"`
+	PublicKey	string `json: "public_key"`
 }
 
 type ConnectResponse struct {
@@ -51,3 +54,10 @@ func ConstructMetaData(fullMsg *CompleteMessage) () {
 	fullMsg.Meta.SentAt = timeStamp.UnixNano()
 }
 
+func GenerateAsyncKeyPair() (publicKey, privateKey *[KEY_SIZE]byte, err error) {
+	publicKey, privateKey, err = box.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	return publicKey, privateKey, nil
+}

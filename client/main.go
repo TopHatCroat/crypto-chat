@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"bytes"
 	"io/ioutil"
+	"log"
 )
 
 var (
@@ -42,8 +43,15 @@ func main() {
 		var password = flag.Arg(1)
 		var connectRequest protocol.ConnectRequest
 
+		public, private, err := protocol.GenerateAsyncKeyPair()
+		helpers.HandleError(err)
+
+		log.Println(helpers.EncodeB64(public[:]))
+		log.Println(helpers.EncodeB64(private[:]))
+
 		connectRequest.UserName = userName
 		connectRequest.Password = password
+		connectRequest.PublicKey = helpers.EncodeB64(public[:])
 		var fullMsg protocol.CompleteMessage
 		fullMsg.Type = "R"
 		protocol.ConstructMetaData(&fullMsg)

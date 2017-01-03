@@ -30,15 +30,11 @@ func openDatabase() {
 	helpers.HandleError(err)
 }
 
-func nesr() {
-
-}
-
 func createDatabase() {
 	openDatabase()
 
 	db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
-		"password VARCHAR(255), gcm VARCHAR(255) NULL)");
+		"password VARCHAR(255), gcm VARCHAR(255) NULL, public_key VARCHAR(255))");
 	db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, " +
 		"reciever_id INTEGER, content BLOB NULL)");
 	db.Close() //close it to write changes
