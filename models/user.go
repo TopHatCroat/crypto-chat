@@ -20,20 +20,21 @@ type User struct {
 	Username string
 	Password string
 	Gcm      string
+	PublicKey string
 }
 
 func (u *User) Save() int64 {
 	db := database.GetDatabase();
 	if u.id == 0 {
-		preparedStatement, err := db.Prepare("INSERT INTO users(username, password, gcm) VALUES(?,?,?)")
+		preparedStatement, err := db.Prepare("INSERT INTO users(username, password, gcm, public_key) VALUES(?,?,?, ?)")
 		helpers.HandleError(err)
-		result, err := preparedStatement.Exec(u.Username, u.Password, u.Gcm)
+		result, err := preparedStatement.Exec(u.Username, u.Password, u.Gcm, u.PublicKey)
 		helpers.HandleError(err)
 		u.id, _ = result.LastInsertId()
 	} else {
-		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ? WHERE id = ?")
+		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ?, public_key = ? WHERE id = ?")
 		helpers.HandleError(err)
-		_, err = preparedStatement.Exec(u.Username, u.Password, u.Gcm, u.id)
+		_, err = preparedStatement.Exec(u.Username, u.Password, u.Gcm, u.id, u.PublicKey)
 		helpers.HandleError(err)
 	}
 	return u.id
@@ -61,7 +62,7 @@ func FindUserById(id int64) (u User) {
 	row, err := preparedStatement.Query(id)
 
 	row.Next()
-	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
+	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm, &u.PublicKey)
 	helpers.HandleError(err)
 	row.Close()
 	return u
@@ -78,7 +79,7 @@ func FindUserByCreds(username string, password string) (u User, e error) {
 	}
 
 	row.Next()
-	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm)
+	err = row.Scan(&u.id, &u.Username, &u.Password, &u.Gcm, &u.PublicKey)
 	defer row.Close()
 	if err != nil {
 		return u, errors.New(constants.WRONG_CREDS_ERROR)
@@ -102,11 +103,11 @@ func usernameExists(username string) (exists bool) {
 	}
 }
 
-func CreateUser(nick string, pass string) (u User, e error) {
+func CreateUser(nick string, pass string, publicKey string) (u User, e error) {
 	if usernameExists(nick) {
 		return u, errors.New(constants.ALREADY_EXISTS)
 	}
-	user := User{Username: nick, Password: pass, Gcm: "0"}
+	user := User{Username: nick, Password: pass, Gcm: "0", PublicKey: publicKey}
 	id := user.Save()
 	user = FindUserById(id)
 	return user, nil

@@ -23,6 +23,7 @@ var (
 
 func main() {
 	flag.Parse()
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -33,6 +34,8 @@ func main() {
 		fmt.Println("SecureChat server closed...")
 		os.Exit(0)
 	}()
+
+
 
 	//conn, err := net.Dial("tcp", "localhost:2000")
 	//helpers.HandleError(err)

@@ -53,7 +53,7 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		Content: &msg,
 	}
 	if err := decoder.Decode(&fullMsg); err != nil {
-		return &appError{err, "lol", 500}
+		return &appError{err, err.Error(), 500}
 	}
 
 
@@ -62,9 +62,9 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		log.Println("Recieved register request")
 		json.Unmarshal(msg, &connectRequest)
 		var user models.User
-		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password)
+		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password, connectRequest.PublicKey)
 		if err != nil {
-			return &appError{err, "Something went tits up", 500}
+			return &appError{err, err.Error(), 500}
 		}
 
 		var connectResponse protocol.ConnectResponse
