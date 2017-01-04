@@ -8,12 +8,14 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"flag"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	"net/http"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"encoding/json"
 	"bytes"
 	"io/ioutil"
 	"log"
+	"crypto/tls"
+	"crypto/x509"
+	"net/http"
 )
 
 var (
@@ -31,15 +33,22 @@ func main() {
 		fmt.Println()
 		fmt.Println(sig)
 		database.CloseDatabase()
-		fmt.Println("SecureChat server closed...")
+		fmt.Println("SecureChat client closed...")
 		os.Exit(0)
 	}()
 
+	rootCertificates := x509.NewCertPool()
+	certificate, err := helpers.ReadFromFile("server.cert")
+	helpers.HandleError(err)
+	ok := rootCertificates.AppendCertsFromPEM(certificate)
+	if !ok {
+		panic("Failed parsing certificate")
+	}
 
-
-	//conn, err := net.Dial("tcp", "localhost:2000")
-	//helpers.HandleError(err)
-
+	TLSConfig := &tls.Config{RootCAs: rootCertificates}
+	TLSConfig.BuildNameToCertificate()
+	transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
+	client := &http.Client{Transport: transportLayer}
 
 	if *registerOption {
 		var userName = flag.Arg(0)
@@ -62,7 +71,7 @@ func main() {
 		buffer := new(bytes.Buffer)
 		json.NewEncoder(buffer).Encode(fullMsg)
 
-		resp, err := http.Post("http://localhost:8080/register", "application/json", buffer)
+		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
 		//defer resp.Close()
 		helpers.HandleError(err)
 
@@ -76,9 +85,6 @@ func main() {
 		} else {
 			fmt.Println(connectResponse.Type)
 		}
-
-		//TODO: find out why this doesn't work
-		//json.NewDecoder(resp.Body).Decode(&connectRequest)
 
 	}
 

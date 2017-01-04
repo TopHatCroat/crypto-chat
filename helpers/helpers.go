@@ -6,6 +6,9 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"log"
 	"encoding/base64"
+	"os"
+	"bufio"
+	"errors"
 )
 
 func HandleError(err error) {
@@ -32,4 +35,28 @@ func DecodeB64(message string) ([]byte) {
 	resultSlice := make([]byte, base64.StdEncoding.DecodedLen(len(message)))
 	length, _ := base64.StdEncoding.Decode(resultSlice, []byte(message))
 	return resultSlice[:length]
+}
+
+func ReadFromFile(fileName string) ([]byte, error) {
+	var inputFile *os.File
+	inputFile, err := os.Open(fileName)
+	if err != nil {
+		return nil, errors.New("File not found")
+	}
+
+	stats, statsErr := inputFile.Stat()
+	if statsErr != nil {
+		return nil, statsErr
+	}
+
+	var size int64 = stats.Size()
+	result := make([]byte, size)
+
+	reader := bufio.NewReader(inputFile)
+	_, err = reader.Read(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

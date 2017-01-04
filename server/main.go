@@ -13,6 +13,7 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"log"
+	"crypto/tls"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -146,25 +147,30 @@ func main() {
 		os.Exit(0)
 	}()
 
+	configuration := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		CurvePreferences: []tls.CurveID{tls.CurveP521},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/register", appHandler(registerHandler))
+
+	server := &http.Server{
+		Addr: ":44333",
+		Handler: mux,
+		TLSConfig: configuration,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+	}
+
 	database.GetDatabase()
-	//http.Handle("/login", appHandler(loginHandler))
-	http.Handle("/register", appHandler(registerHandler))
-	//http.Handle("/", appHandler(sendHandler))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(server.ListenAndServeTLS("server.cert", "server.key"))
 
 
-	//listener, err := net.Listen("tcp", ":2000")
-	//helpers.HandleError(err)
-
-	//for {
-	//	conn, err := listener.Accept()
-	//	if err != nil {
-	//		continue
-	//	}
-	//	// run as a goroutine
-	//	go handleClient(conn)
-	//}
-
-
-	//database.CloseDatabase()
 }
