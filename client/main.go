@@ -103,7 +103,7 @@ func main() {
 		buffer := new(bytes.Buffer)
 		json.NewEncoder(buffer).Encode(fullMsg)
 
-		resp, err := http.Post("http://localhost:8080/register", "application/json", buffer)
+		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
 		//defer resp.Close()
 		helpers.HandleError(err)
 
@@ -116,6 +116,7 @@ func main() {
 			fmt.Println(connectResponse.Error)
 		} else {
 			fmt.Println(connectResponse.Type)
+			fmt.Println(connectResponse.Token)
 		}
 
 	}

@@ -1,50 +1,26 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"github.com/TopHatCroat/CryptoChat-server/models"
-	"github.com/TopHatCroat/CryptoChat-server/database"
-	"os"
-	"syscall"
-	"os/signal"
-	"net"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
+	"github.com/TopHatCroat/CryptoChat-server/database"
+	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"log"
-	"crypto/tls"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
 
 type appError struct {
-	Error error
+	Error   error
 	Message string
-	Code int
-}
-
-func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
-
-	response, _ := json.Marshal(req.URL.Path[1:])
-	fmt.Fprintf(rw, string(response))
-
-	return nil
-}
-
-func loginHandler(rw http.ResponseWriter, req *http.Request) *appError {
-	username := req.URL.Query().Get(constants.USERNAME)
-	password := req.URL.Query().Get(constants.PASSWORD)
-
-	_, err := models.FindUserByCreds(username, password)
-	if err != nil {
-		return &appError{err, "whops", 500}
-	}
-
-	response, _ := json.Marshal(map[string]interface{}{"msg": constants.LOGIN_SUCCESS})
-	fmt.Fprintf(rw, string(response))
-
-	return nil
+	Code    int
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
@@ -56,7 +32,6 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	if err := decoder.Decode(&fullMsg); err != nil {
 		return &appError{err, err.Error(), 500}
 	}
-
 
 	if fullMsg.Type == "R" {
 		var connectRequest protocol.ConnectRequest
@@ -81,21 +56,19 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		log.Println("Recieved login request")
 		json.Unmarshal(msg, &connectRequest)
 		var user models.User
-		user, err := models.FindUserByCreds(connectRequest.UserName, connectRequest.Password)
+		user, err := models.FindUserByCreds(connectRequest.UserName)
 		if err != nil {
 			return &appError{err, err.Error(), 500}
 		}
-		//encoder := json.NewEncoder(rw)
-		//
-		//if err != nil {
-		//	//encoder.Encode(map[string]string {"error": constants.WRONG_CREDS_ERROR})
-		//	helpers.HandleServerError(err, rw)
-		//	return
-		//}
+
+		userToken, err := user.LogIn(connectRequest.Password)
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
 
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.LOGIN_SUCCESS
-		connectResponse.Token = user.Username
+		connectResponse.Token = userToken
 
 		encoder := json.NewEncoder(rw)
 		encoder.Encode(connectResponse)
@@ -104,33 +77,10 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	return nil
 }
 
-func handleClient(conn net.Conn) {
-	// close connection on exit
-	defer conn.Close()
-
-	var buf [512]byte
-	for {
-		// read upto 512 bytes
-		n, err := conn.Read(buf[0:])
-		if err != nil {
-			return
-		}
-
-		fmt.Println(n);
-		fmt.Println(buf);
-
-		// write the n bytes read
-		_, err2 := conn.Write(buf[0:n])
-		if err2 != nil {
-			return
-		}
-	}
-}
-
 func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if err := fn(rw, req); err != nil {
 		encoder := json.NewEncoder(rw)
-		encoder.Encode(map[string]string {"error": err.Message})
+		encoder.Encode(map[string]string{"error": err.Message})
 		//http.Error(rw, err.Message, err.Code)
 	}
 }
@@ -148,8 +98,8 @@ func main() {
 	}()
 
 	configuration := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		CurvePreferences: []tls.CurveID{tls.CurveP521},
+		MinVersion:               tls.VersionTLS12,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521},
 		PreferServerCipherSuites: true,
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
@@ -163,14 +113,13 @@ func main() {
 	mux.Handle("/register", appHandler(registerHandler))
 
 	server := &http.Server{
-		Addr: ":44333",
-		Handler: mux,
-		TLSConfig: configuration,
+		Addr:         ":44333",
+		Handler:      mux,
+		TLSConfig:    configuration,
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
 
 	database.GetDatabase()
 	log.Fatal(server.ListenAndServeTLS("server.cert", "server.key"))
-
 
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"golang.org/x/crypto/nacl/box"
 	"time"
+	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -41,6 +42,11 @@ type ConnectResponse struct {
 
 type ErrorResponse struct {
 	Error string `json: "error"`
+}
+
+type Claims struct {
+	Username string 	`json:"username"`
+	jwt.StandardClaims
 }
 
 func ResolveRequest(data []byte) (returnData []byte, err error) {
