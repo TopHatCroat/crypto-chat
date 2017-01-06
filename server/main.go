@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/database"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
-	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	"os/exec"
+	"errors"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -23,6 +24,51 @@ type appError struct {
 	Error   error
 	Message string
 	Code    int
+}
+
+func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
+	decoder := json.NewDecoder(req.Body)
+	var msg json.RawMessage
+	fullMsg := protocol.CompleteMessage{
+		Content: &msg,
+	}
+	if err := decoder.Decode(&fullMsg); err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	user, err := models.FindUserByToken(fullMsg.Meta.Token)
+	if err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	if fullMsg.Type == "S" {
+		var messageRequest protocol.Message
+		log.Println("Recieved message request")
+		json.Unmarshal(msg, &messageRequest)
+
+		message := &models.Message{
+			RecieverID: int64(messageRequest.Reciever),
+			SenderID: user.ID,
+			Content: messageRequest.Content,
+		}
+
+		err := message.Save()
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
+
+		var messageResponse protocol.MessageResponse
+		messageResponse.Message = constants.MESSAGE_SENT
+
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(messageResponse)
+
+	} else {
+		err := errors.New(constants.WRONG_REQUEST)
+		return &appError{err, err.Error(), 500}
+	}
+
+	return nil
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
@@ -95,12 +141,11 @@ func init() {
 			panic(err)
 		}
 
-
-		err = os.Rename("key.pem",  "token.pem")
+		err = os.Rename("key.pem", "token.pem")
 		if err != nil {
 			panic(err)
 		}
-		err = os.Rename("cert.pem",  "token_cert.pem")
+		err = os.Rename("cert.pem", "token_cert.pem")
 		if err != nil {
 			panic(err)
 		}
@@ -134,6 +179,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/register", appHandler(registerHandler))
+	mux.Handle("/send", appHandler(sendHandler))
 
 	server := &http.Server{
 		Addr:         ":44333",

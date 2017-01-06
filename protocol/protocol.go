@@ -2,9 +2,9 @@ package protocol
 
 import (
 	"crypto/rand"
+	"github.com/dgrijalva/jwt-go"
 	"golang.org/x/crypto/nacl/box"
 	"time"
-	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -18,14 +18,14 @@ type CompleteMessage struct {
 }
 
 type Message struct {
-	Sender   []byte `json: "sender"`
-	Reciever []byte `json: "reciever"`
-	Content  []byte `json: "content"`
+	Reciever int64  `json: "reciever"`
+	Content  string `json: "content"`
 }
 
 type Meta struct {
 	SentAt int64  `json: "sent_at"`
-	Hash   []byte `json: "hash"`
+	Hash   string `json: "hash"`
+	Token  string `json; "token"`
 }
 
 type ConnectRequest struct {
@@ -40,12 +40,17 @@ type ConnectResponse struct {
 	Error string `json: "error"`
 }
 
+type MessageResponse struct {
+	Message string `json: "message"`
+	Error   string `json: "error"`
+}
+
 type ErrorResponse struct {
 	Error string `json: "error"`
 }
 
 type Claims struct {
-	Username string 	`json:"username"`
+	Username string `json:"username"`
 	jwt.StandardClaims
 }
 

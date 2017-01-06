@@ -1,26 +1,26 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
+	"github.com/TopHatCroat/CryptoChat-server/protocol"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"fmt"
-	"github.com/TopHatCroat/CryptoChat-server/database"
-	"flag"
-	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	"github.com/TopHatCroat/CryptoChat-server/protocol"
-	"encoding/json"
-	"bytes"
-	"io/ioutil"
-	"log"
-	"crypto/tls"
-	"crypto/x509"
-	"net/http"
+	"bufio"
 )
 
 var (
 	registerOption = flag.Bool("register", false, "registers with server using username and password specified")
-	loginOption = flag.Bool("login", false, "logs in on the server using username and password")
+	loginOption    = flag.Bool("login", false, "logs in on the server using username and password")
 )
 
 func main() {
@@ -32,7 +32,6 @@ func main() {
 		sig := <-sigs
 		fmt.Println()
 		fmt.Println(sig)
-		database.CloseDatabase()
 		fmt.Println("SecureChat client closed...")
 		os.Exit(0)
 	}()
@@ -111,14 +110,53 @@ func main() {
 		body, err := ioutil.ReadAll(resp.Body)
 		helpers.HandleError(err)
 		err = json.Unmarshal(body, &connectResponse)
+		helpers.HandleError(err)
 
 		if connectResponse.Error != "" {
 			fmt.Println(connectResponse.Error)
+			panic(connectResponse.Error)
 		} else {
 			fmt.Println(connectResponse.Type)
-			fmt.Println(connectResponse.Token)
 		}
 
+		reader := bufio.NewReader(os.Stdin)
+		for true {
+			fmt.Print("Enter text: ")
+			text, err := reader.ReadString('\n')
+			helpers.HandleError(err)
+
+			var fullNewMsg protocol.CompleteMessage
+			var messageRequest protocol.Message
+			messageRequest.Content = text
+			messageRequest.Reciever = 0
+
+			fullNewMsg.Type = "S"
+			protocol.ConstructMetaData(&fullNewMsg)
+			fullNewMsg.Content = messageRequest
+			fullNewMsg.Meta.Token = connectResponse.Token
+			buffer := new(bytes.Buffer)
+			json.NewEncoder(buffer).Encode(fullNewMsg)
+
+			resp, err := client.Post("https://localhost:44333/send", "application/json", buffer)
+			helpers.HandleError(err)
+
+			var messageResponse protocol.MessageResponse
+			body, err := ioutil.ReadAll(resp.Body)
+			helpers.HandleError(err)
+			err = json.Unmarshal(body, &messageResponse)
+			helpers.HandleError(err)
+
+			if messageResponse.Error != "" {
+				fmt.Println(messageResponse.Error)
+				break
+			} else {
+				fmt.Println(messageResponse.Message)
+			}
+		}
+
+
 	}
+
+	//flag.Usage()
 
 }

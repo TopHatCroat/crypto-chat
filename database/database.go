@@ -58,14 +58,14 @@ func createDatabase(dbName string) {
 		db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
 			"password VARCHAR(255), gcm VARCHAR(255) NULL, public_key VARCHAR(257))")
 		db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, " +
-			"reciever_id INTEGER, content BLOB NULL)")
+			"reciever_id INTEGER, content TEXT NULL)")
 		db.Exec("CREATE TABLE user_sessions (session_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL, " +
 			"login_time INTEGER NOT NULL, last_seen_time INTEGER NOT NULL)")
 	} else {
 		db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
 			"password VARCHAR(255), gcm VARCHAR(255) NULL, public_key VARCHAR(257), public_key VARCHAR(257))")
 		db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, " +
-			"reciever_id INTEGER, content BLOB NULL)")
+			"reciever_id INTEGER, content TEXT NULL)")
 		db.Exec("CREATE TABLE user_sessions (session_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL, " +
 			"login_time INTEGER NOT NULL, last_seen_time INTEGER NOT NULL)")
 	}

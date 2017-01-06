@@ -5,13 +5,11 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	"golang.org/x/crypto/bcrypt"
-	"time"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"github.com/dgrijalva/jwt-go"
+	"golang.org/x/crypto/bcrypt"
+	"time"
 )
-
-var ()
 
 type Entity interface {
 	Save() int64
@@ -19,7 +17,7 @@ type Entity interface {
 }
 
 type User struct {
-	id             int64
+	ID             int64
 	Username       string
 	PasswordDigest string
 	Gcm            string
@@ -28,19 +26,19 @@ type User struct {
 
 func (u *User) Save() int64 {
 	db := database.GetDatabase()
-	if u.id == 0 {
+	if u.ID == 0 {
 		preparedStatement, err := db.Prepare("INSERT INTO users(username, password, gcm, public_key) VALUES(?,?,?,?)")
 		helpers.HandleError(err)
 		result, err := preparedStatement.Exec(u.Username, u.PasswordDigest, u.Gcm, u.PublicKey)
 		helpers.HandleError(err)
-		u.id, _ = result.LastInsertId()
+		u.ID, _ = result.LastInsertId()
 	} else {
 		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ?, public_key = ? WHERE id = ?")
 		helpers.HandleError(err)
-		_, err = preparedStatement.Exec(u.Username, u.PasswordDigest, u.Gcm, u.id, u.PublicKey)
+		_, err = preparedStatement.Exec(u.Username, u.PasswordDigest, u.Gcm, u.ID, u.PublicKey)
 		helpers.HandleError(err)
 	}
-	return u.id
+	return u.ID
 }
 
 func (u *User) LogIn(password string) (string, error) {
@@ -53,7 +51,7 @@ func (u *User) LogIn(password string) (string, error) {
 		u.Username,
 		jwt.StandardClaims{
 			IssuedAt: time.Now().UnixNano(),
-			Issuer: constants.SERVER_NAME,
+			Issuer:   constants.SERVER_NAME,
 		},
 	}
 
@@ -72,9 +70,9 @@ func (u *User) LogIn(password string) (string, error) {
 	}
 
 	userSession := UserSession{
-		SessionKey:	signedToken,
-		UserID: u.id,
-		LoginTime: time.Now().UnixNano(),
+		SessionKey:   signedToken,
+		UserID:       u.ID,
+		LoginTime:    time.Now().UnixNano(),
 		LastSeenTime: time.Now().UnixNano(),
 	}
 
@@ -91,7 +89,7 @@ func (u *User) Delete() int64 {
 
 	preparedStatement, err := db.Prepare("DELETE FROM users WHERE id = ?")
 	helpers.HandleError(err)
-	result, err := preparedStatement.Exec(u.id)
+	result, err := preparedStatement.Exec(u.ID)
 	helpers.HandleError(err)
 
 	defer db.Close()
@@ -100,7 +98,7 @@ func (u *User) Delete() int64 {
 	return count
 }
 
-func FindUserById(id int64) (u User) {
+func FindUserById(id int64) (u User, err error) {
 	db := database.GetDatabase()
 
 	preparedStatement, err := db.Prepare("SELECT * FROM users WHERE id = ?")
@@ -108,10 +106,12 @@ func FindUserById(id int64) (u User) {
 	row, err := preparedStatement.Query(id)
 
 	row.Next()
-	err = row.Scan(&u.id, &u.Username, &u.PasswordDigest, &u.Gcm, &u.PublicKey)
-	helpers.HandleError(err)
+	err = row.Scan(&u.ID, &u.Username, &u.PasswordDigest, &u.Gcm, &u.PublicKey)
+	if err != nil {
+		return u, errors.New(constants.NO_SUCH_USER_ERROR)
+	}
 	row.Close()
-	return u
+	return u, nil
 }
 
 func FindUserByCreds(username string) (u User, e error) {
@@ -125,7 +125,7 @@ func FindUserByCreds(username string) (u User, e error) {
 	}
 
 	row.Next()
-	err = row.Scan(&u.id, &u.Username, &u.PasswordDigest, &u.Gcm, &u.PublicKey)
+	err = row.Scan(&u.ID, &u.Username, &u.PasswordDigest, &u.Gcm, &u.PublicKey)
 	defer row.Close()
 	if err != nil {
 		return u, errors.New(constants.WRONG_CREDS_ERROR)
@@ -149,6 +149,45 @@ func usernameExists(username string) (exists bool) {
 	}
 }
 
+func FindUserByToken(token string) (user User, e error) {
+	db := database.GetDatabase()
+
+	preparedStatement, err := db.Prepare("SELECT * FROM user_sessions WHERE session_key = ? ")
+	if err != nil {
+		panic(err)
+	}
+	row, err := preparedStatement.Query(token)
+	if err != nil {
+		return user, errors.New(constants.INVALID_TOKEN)
+	}
+
+	var userSession UserSession
+	row.Next()
+	err = row.Scan(&userSession.SessionKey, &userSession.UserID, &userSession.LoginTime, &userSession.LastSeenTime)
+	row.Close()
+	if err != nil {
+		return user, errors.New(constants.INVALID_TOKEN)
+	}
+
+	if userSession.LastSeenTime < time.Now().Add(-1*time.Minute).UnixNano() ||
+		userSession.LoginTime < time.Now().Add(-1*time.Hour).UnixNano() {
+		return user, errors.New(constants.OLD_TOKEN)
+	}
+
+	userSession.LastSeenTime = time.Now().UnixNano()
+	err = userSession.Save()
+	if err != nil {
+		return user, err
+	}
+
+	user, err = FindUserById(userSession.UserID)
+	if err != nil {
+		return user, err
+	}
+
+	return user, nil
+}
+
 func CreateUser(nick string, pass string, publicKey string) (u User, e error) {
 	if usernameExists(nick) {
 		return u, errors.New(constants.ALREADY_EXISTS)
@@ -161,6 +200,10 @@ func CreateUser(nick string, pass string, publicKey string) (u User, e error) {
 
 	user := User{Username: nick, PasswordDigest: string(passwordDigest), Gcm: "0", PublicKey: publicKey}
 	id := user.Save()
-	user = FindUserById(id)
+	user, err = FindUserById(id)
+	if err != nil {
+		return u, err
+	}
+
 	return user, nil
 }
