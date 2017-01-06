@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
+	"os/exec"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -83,6 +85,27 @@ func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		encoder.Encode(map[string]string{"error": err.Message})
 		//http.Error(rw, err.Message, err.Code)
 	}
+}
+
+func init() {
+	_, err := helpers.ReadFromFile("token.pem")
+	if err != nil {
+		err := exec.Command("./tools").Run()
+		if err != nil {
+			panic(err)
+		}
+
+
+		err = os.Rename("key.pem",  "token.pem")
+		if err != nil {
+			panic(err)
+		}
+		err = os.Rename("cert.pem",  "token_cert.pem")
+		if err != nil {
+			panic(err)
+		}
+	}
+
 }
 
 func main() {

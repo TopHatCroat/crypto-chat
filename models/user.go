@@ -7,6 +7,8 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"golang.org/x/crypto/bcrypt"
 	"time"
+	"github.com/TopHatCroat/CryptoChat-server/protocol"
+	"github.com/dgrijalva/jwt-go"
 )
 
 var ()
@@ -44,32 +46,33 @@ func (u *User) Save() int64 {
 func (u *User) LogIn(password string) (string, error) {
 	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordDigest), []byte(password))
 	if err != nil {
+		return "", errors.New(constants.WRONG_CREDS_ERROR)
+	}
+
+	claims := protocol.Claims{
+		u.Username,
+		jwt.StandardClaims{
+			IssuedAt: time.Now().UnixNano(),
+			Issuer: constants.SERVER_NAME,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodES384, claims)
+	tokenBytes, err := helpers.ReadFromFile("token.pem")
+	if err != nil {
+		return "", err
+	}
+	tokenParsedECPrivate, err := jwt.ParseECPrivateKeyFromPEM(tokenBytes)
+	if err != nil {
+		return "", err
+	}
+	signedToken, err := token.SignedString(tokenParsedECPrivate)
+	if err != nil {
 		return "", err
 	}
 
-	//expireToken := time.Now().Add(time.Hour * 1).UnixNano()
-	//claims := protocol.Claims{
-	//	u.Username,
-	//	jwt.StandardClaims{
-	//		IssuedAt: time.Now().UnixNano(),
-	//		Issuer: constants.SERVER_NAME,
-	//		ExpiresAt: expireToken,
-	//	},
-	//}
-
-	//token := jwt.NewWithClaims(jwt.SigningMethodES512, jwt.MapClaims{
-	//	"username" : u.Username,
-	//	"timeCreated" : time.Now().UnixNano(),
-	//})
-
-	//token := jwt.New(jwt.SigningMethodES512)
-	//signedToken, err := token.SignedString([]byte("TODO"))
-	//if err != nil {
-	//	return "", err
-	//}
-
 	userSession := UserSession{
-		SessionKey:	"TODO",
+		SessionKey:	signedToken,
 		UserID: u.id,
 		LoginTime: time.Now().UnixNano(),
 		LastSeenTime: time.Now().UnixNano(),
@@ -80,7 +83,7 @@ func (u *User) LogIn(password string) (string, error) {
 		return "", err
 	}
 
-	return "TODO", nil
+	return signedToken, nil
 }
 
 func (u *User) Delete() int64 {

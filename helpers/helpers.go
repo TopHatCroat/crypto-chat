@@ -60,3 +60,37 @@ func ReadFromFile(fileName string) ([]byte, error) {
 
 	return result, nil
 }
+
+func WriteToFile(fileName string, data []byte) (error) {
+	//try to open the file with path fileName
+	var outputFile *os.File
+	outputFile, err := os.OpenFile(fileName, os.O_RDWR, os.ModeAppend)
+	if err != nil {
+		//if it fails with Not Exist error, we create the file
+		if os.IsNotExist(err) {
+			outputFile, err = os.Create(fileName)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	// close fi on exit and check for its returned error
+	defer func() {
+		if err := outputFile.Close(); err != nil {
+			return
+		}
+	}()
+
+	writen, err := outputFile.Write(data)
+	if err != nil {
+		return err
+	}
+	if writen != len(data) {
+		return errors.New("Error writing to file")
+	}
+
+	outputFile.Sync()
+	return nil
+}
