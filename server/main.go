@@ -3,19 +3,18 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/database"
-	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
-	"errors"
+	"github.com/TopHatCroat/CryptoChat-server/tools"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -48,8 +47,8 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		message := &models.Message{
 			RecieverID: int64(messageRequest.Reciever),
-			SenderID: user.ID,
-			Content: messageRequest.Content,
+			SenderID:   user.ID,
+			Content:    messageRequest.Content,
 		}
 
 		err := message.Save()
@@ -134,23 +133,9 @@ func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 func init() {
-	_, err := helpers.ReadFromFile("token.pem")
-	if err != nil {
-		err := exec.Command("./tools").Run()
-		if err != nil {
-			panic(err)
-		}
-
-		err = os.Rename("key.pem", "token.pem")
-		if err != nil {
-			panic(err)
-		}
-		err = os.Rename("cert.pem", "token_cert.pem")
-		if err != nil {
-			panic(err)
-		}
+	if _, err := os.Stat(constants.TOKEN_KEY_FILE); os.IsNotExist(err) {
+		tools.GenerateTokenKey()
 	}
-
 }
 
 func main() {

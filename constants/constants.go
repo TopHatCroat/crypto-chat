@@ -15,4 +15,5 @@ var (
 
 	SERVER_NAME = "localhost:44333"
 	TODO_SECRET = "TODO: secret"
+	TOKEN_KEY_FILE     = "token_key.pem"
 )

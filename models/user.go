@@ -50,13 +50,13 @@ func (u *User) LogIn(password string) (string, error) {
 	claims := protocol.Claims{
 		u.Username,
 		jwt.StandardClaims{
-			IssuedAt: time.Now().UnixNano(),
+			IssuedAt: time.Now().Unix(),
 			Issuer:   constants.SERVER_NAME,
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodES384, claims)
-	tokenBytes, err := helpers.ReadFromFile("token.pem")
+	tokenBytes, err := helpers.ReadFromFile(constants.TOKEN_KEY_FILE)
 	if err != nil {
 		return "", err
 	}
@@ -149,8 +149,13 @@ func usernameExists(username string) (exists bool) {
 	}
 }
 
-func FindUserByToken(token string) (user User, e error) {
+func FindUserByToken(token string) (user User, err error) {
 	db := database.GetDatabase()
+
+	claims, err := ParseToken(token)
+	if err != nil {
+		return user, err
+	}
 
 	preparedStatement, err := db.Prepare("SELECT * FROM user_sessions WHERE session_key = ? ")
 	if err != nil {
@@ -183,6 +188,10 @@ func FindUserByToken(token string) (user User, e error) {
 	user, err = FindUserById(userSession.UserID)
 	if err != nil {
 		return user, err
+	}
+
+	if claims.Username != user.Username {
+		return user, errors.New(constants.INVALID_TOKEN)
 	}
 
 	return user, nil
