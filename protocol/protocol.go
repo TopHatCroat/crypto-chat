@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"crypto/rand"
-	"github.com/TopHatCroat/CryptoChat-server/models"
 	"golang.org/x/crypto/nacl/box"
 	"time"
 )
@@ -19,6 +18,12 @@ type CompleteMessage struct {
 
 type Message struct {
 	Reciever  int64  `json:"reciever"`
+	Content   string `json:"content"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type MessageData struct {
+	Sender    string `json:"sender"`
 	Content   string `json:"content"`
 	Timestamp int64  `json:"timestamp"`
 }
@@ -46,8 +51,8 @@ type GetMessagesRequest struct {
 }
 
 type GetMessagesResponse struct {
-	Messages []models.Message `json:"messages"`
-	Error    string           `json:"error"`
+	Messages []MessageData `json:"messages"`
+	Error    string        `json:"error"`
 }
 
 type MessageResponse struct {

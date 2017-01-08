@@ -9,22 +9,24 @@ import (
 	"flag"
 	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
+	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
+	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"strconv"
 )
 
 var (
-	registerOption = flag.Bool("register", false, "registers with server using username and password specified")
-	loginOption    = flag.Bool("login", false, "logs in on the server using username and password")
-	newMessages    = make(chan protocol.Message, 1)
+	registerOption    = flag.Bool("r", false, "registers with server using username and password specified")
+	loginOption       = flag.Bool("l", false, "logs in on the server using username and password")
+	sendOption        = flag.Bool("s", false, "send a message to user")
+	getMessagesOption = flag.Bool("g", false, "send a message to user")
+	newMessages       = make(chan protocol.Message, 1)
 )
 
 func init() {
@@ -35,6 +37,7 @@ func init() {
 
 func main() {
 	flag.Parse()
+	database.GetDatabase()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -42,6 +45,7 @@ func main() {
 		sig := <-sigs
 		fmt.Println()
 		fmt.Println(sig)
+		database.CloseDatabase()
 		fmt.Println("SecureChat client closed...")
 		os.Exit(0)
 	}()
@@ -60,19 +64,32 @@ func main() {
 	client := &http.Client{Transport: transportLayer}
 
 	if *registerOption {
-		var userName = flag.Arg(0)
-		var password = flag.Arg(1)
+		userName, password := helpers.GetCredentials()
 		var connectRequest protocol.ConnectRequest
 
 		public, private, err := protocol.GenerateAsyncKeyPair()
 		helpers.HandleError(err)
 
-		log.Println(helpers.EncodeB64(public[:]))
-		log.Println(helpers.EncodeB64(private[:]))
+		var privateKey models.Setting
+		var publicKey models.Setting
+
+		privateKey.Key = constants.PRIVATE_KEY
+		privateKey.Value = helpers.EncodeB64(private[:])
+		err = privateKey.Save()
+		if err != nil {
+			panic(err)
+		}
+
+		publicKey.Key = constants.PUBLIC_KEY
+		publicKey.Value = helpers.EncodeB64(public[:])
+		err = publicKey.Save()
+		if err != nil {
+			panic(err)
+		}
 
 		connectRequest.UserName = userName
 		connectRequest.Password = password
-		connectRequest.PublicKey = helpers.EncodeB64(public[:])
+		connectRequest.PublicKey = publicKey.Value
 		var fullMsg protocol.CompleteMessage
 		fullMsg.Type = "R"
 		protocol.ConstructMetaData(&fullMsg)
@@ -95,11 +112,10 @@ func main() {
 			fmt.Println(connectResponse.Type)
 		}
 
-	}
+	} else if *loginOption {
+		userName, password := helpers.GetCredentials()
 
-	if *loginOption {
-		var userName = flag.Arg(0)
-		var password = flag.Arg(1)
+		println(userName, password)
 		var connectRequest protocol.ConnectRequest
 
 		connectRequest.UserName = userName
@@ -129,61 +145,75 @@ func main() {
 			fmt.Println(connectResponse.Type)
 		}
 
-		go receiveNewMessages(*client, connectResponse)
-
+		var token models.Setting
+		token.Key = constants.TOKEN_KEY
+		token.Value = connectResponse.Token
+		err = token.Save()
+		if err != nil {
+			panic(err)
+		}
+	} else if *sendOption {
 		reader := bufio.NewReader(os.Stdin)
-		for true {
-			fmt.Print("Enter text: ")
-			text, err := reader.ReadString('\n')
-			helpers.HandleError(err)
+		fmt.Print("Enter text: ")
+		text, err := reader.ReadString('\n')
+		helpers.HandleError(err)
 
-			var fullNewMsg protocol.CompleteMessage
-			var messageRequest protocol.Message
-			messageRequest.Content = text
-			messageRequest.Reciever = 2
-			messageRequest.Timestamp = time.Now().UnixNano()
+		var fullNewMsg protocol.CompleteMessage
+		var messageRequest protocol.Message
+		messageRequest.Content = text
+		messageRequest.Reciever = 2
+		messageRequest.Timestamp = time.Now().UnixNano()
 
-			fullNewMsg.Type = "S"
-			protocol.ConstructMetaData(&fullNewMsg)
-			fullNewMsg.Content = messageRequest
-			fullNewMsg.Meta.Token = connectResponse.Token
-			buffer := new(bytes.Buffer)
-			json.NewEncoder(buffer).Encode(fullNewMsg)
-
-			resp, err := client.Post("https://localhost:44333/send", "application/json", buffer)
-			helpers.HandleError(err)
-
-			var messageResponse protocol.MessageResponse
-			body, err := ioutil.ReadAll(resp.Body)
-			helpers.HandleError(err)
-			err = json.Unmarshal(body, &messageResponse)
-			helpers.HandleError(err)
-
-			if messageResponse.Error != "" {
-				fmt.Println(messageResponse.Error)
-				break
-			} else {
-				fmt.Println(messageResponse.Message)
-			}
+		token, err := models.GetSetting(constants.TOKEN_KEY)
+		if err != nil {
+			panic(err)
 		}
 
+		fullNewMsg.Type = "S"
+		protocol.ConstructMetaData(&fullNewMsg)
+		fullNewMsg.Content = messageRequest
+		fullNewMsg.Meta.Token = token.Value
+		buffer := new(bytes.Buffer)
+		json.NewEncoder(buffer).Encode(fullNewMsg)
+
+		resp, err := client.Post("https://localhost:44333/send", "application/json", buffer)
+		helpers.HandleError(err)
+
+		var messageResponse protocol.MessageResponse
+		body, err := ioutil.ReadAll(resp.Body)
+		helpers.HandleError(err)
+		err = json.Unmarshal(body, &messageResponse)
+		helpers.HandleError(err)
+
+		if messageResponse.Error != "" {
+			fmt.Println(messageResponse.Error)
+		} else {
+			fmt.Println(messageResponse.Message)
+		}
+	} else if *getMessagesOption {
+		receiveNewMessages(*client)
 	}
 
 	//flag.Usage()
 
 }
 
-func receiveNewMessages(client http.Client, connectResponse protocol.ConnectResponse) {
+func receiveNewMessages(client http.Client) {
 	timestamp := int64(0)
-	for ;; time.Sleep(1 * time.Second) {
+	for ; ; time.Sleep(1 * time.Second) {
 		var fullNewMsg protocol.CompleteMessage
 		var getMessagesRequest protocol.GetMessagesRequest
 		getMessagesRequest.LastMessageTimestamp = timestamp
 
+		token, err := models.GetSetting(constants.TOKEN_KEY)
+		if err != nil {
+			panic(err)
+		}
+
 		fullNewMsg.Type = "M"
 		protocol.ConstructMetaData(&fullNewMsg)
 		fullNewMsg.Content = getMessagesRequest
-		fullNewMsg.Meta.Token = connectResponse.Token
+		fullNewMsg.Meta.Token = token.Value
 		buffer := new(bytes.Buffer)
 		json.NewEncoder(buffer).Encode(fullNewMsg)
 
@@ -198,10 +228,18 @@ func receiveNewMessages(client http.Client, connectResponse protocol.ConnectResp
 
 		if getMessagesResponse.Error != "" {
 			fmt.Println(getMessagesResponse.Error)
+			panic(err)
 		} else {
 			for _, msg := range getMessagesResponse.Messages {
-				fmt.Println(strconv.Itoa(int(msg.SenderID)) + ": " + msg.Content)
-				timestamp = msg.CreatedAt
+				sentAt := time.Unix(0, msg.Timestamp)
+
+				fmt.Print(msg.Sender)
+				fmt.Print(" (")
+				fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
+				fmt.Print("): ")
+				fmt.Print(msg.Content)
+
+				timestamp = sentAt.UnixNano()
 			}
 		}
 	}

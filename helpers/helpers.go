@@ -9,6 +9,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"fmt"
+	"golang.org/x/crypto/ssh/terminal"
+	"syscall"
+	"strings"
 )
 
 func HandleError(err error) {
@@ -93,4 +97,16 @@ func WriteToFile(fileName string, data []byte) error {
 
 	outputFile.Sync()
 	return nil
+}
+
+func GetCredentials() (string, string) {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Username: ")
+	username, _ := reader.ReadString('\n')
+
+	fmt.Print("Password: ")
+	bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
+
+	return strings.TrimSpace(username), strings.TrimSpace(string(bytePassword))
 }

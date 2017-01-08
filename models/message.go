@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/TopHatCroat/CryptoChat-server/database"
+	"github.com/TopHatCroat/CryptoChat-server/protocol"
 )
 
 type Message struct {
@@ -45,10 +46,12 @@ func (msg *Message) Delete() error {
 	return nil
 }
 
-func GetNewMessagesForUser(user User, timestamp int64) (messages []Message, err error) {
+func GetNewMessagesForUser(user User, timestamp int64) (messages []protocol.MessageData, err error) {
 	db := database.GetDatabase()
 
-	preparedStatement, err := db.Prepare("SELECT * FROM messages WHERE reciever_id = ? AND created_at > ?")
+	preparedStatement, err := db.Prepare("SELECT users.username, messages.content, messages.created_at " +
+		"FROM messages JOIN users on messages.sender_id = users.id " +
+		"WHERE messages.reciever_id = ? AND messages.created_at > ?")
 	if err != nil {
 		return messages, err
 	}
@@ -59,8 +62,8 @@ func GetNewMessagesForUser(user User, timestamp int64) (messages []Message, err 
 	}
 
 	for rows.Next() {
-		var message Message
-		rows.Scan(&message.ID, &message.SenderID, &message.RecieverID, &message.Content, &message.CreatedAt)
+		var message protocol.MessageData
+		rows.Scan(&message.Sender, &message.Content, &message.Timestamp)
 		messages = append(messages, message)
 	}
 	rows.Close()
