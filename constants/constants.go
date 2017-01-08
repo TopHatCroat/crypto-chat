@@ -13,7 +13,10 @@ var (
 	OLD_TOKEN          = "Expired token"
 	MESSAGE_SENT       = "Message sent successfully"
 
-	SERVER_NAME = "localhost:44333"
-	TODO_SECRET = "TODO: secret"
-	TOKEN_KEY_FILE     = "token_key.pem"
+	SERVER_NAME    = "localhost:44333"
+	TODO_SECRET    = "TODO: secret"
+	TOKEN_KEY_FILE = "token_key.pem"
+	EDITION_VAR    = "SECURECHAT"
+	SERVER_EDITION = "server"
+	CLIENT_EDITION = "client"
 )

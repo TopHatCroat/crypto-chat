@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/TopHatCroat/CryptoChat-server/database"
-	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"github.com/dgrijalva/jwt-go"
 	"errors"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
@@ -14,6 +13,11 @@ type UserSession struct {
 	UserID       int64
 	LoginTime    int64
 	LastSeenTime int64
+}
+
+type Claims struct {
+	Username string `json:"username"`
+	jwt.StandardClaims
 }
 
 func (ses *UserSession) Save() error {
@@ -49,7 +53,7 @@ func (ses *UserSession) Delete() error {
 	return nil
 }
 
-func ParseToken(tokenString string) (cl protocol.Claims, err error) {
+func ParseToken(tokenString string) (cl Claims, err error) {
 	tokenBytes, err := helpers.ReadFromFile(constants.TOKEN_KEY_FILE)
 	if err != nil {
 		return cl, err
@@ -59,7 +63,7 @@ func ParseToken(tokenString string) (cl protocol.Claims, err error) {
 		return cl, err
 	}
 
-	token, err := jwt.ParseWithClaims(tokenString, &protocol.Claims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, errors.New(constants.INVALID_TOKEN)
 		}
@@ -71,7 +75,7 @@ func ParseToken(tokenString string) (cl protocol.Claims, err error) {
 		return cl, err
 	}
 
-	if claims, ok := token.Claims.(*protocol.Claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return *claims, nil
   	} else {
 		return *claims, errors.New(constants.INVALID_TOKEN)

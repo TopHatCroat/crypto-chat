@@ -9,12 +9,12 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
+	"github.com/TopHatCroat/CryptoChat-server/tools"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"github.com/TopHatCroat/CryptoChat-server/tools"
 )
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -49,6 +49,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 			RecieverID: int64(messageRequest.Reciever),
 			SenderID:   user.ID,
 			Content:    messageRequest.Content,
+			CreatedAt:  messageRequest.Timestamp,
 		}
 
 		err := message.Save()
@@ -62,6 +63,43 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		encoder := json.NewEncoder(rw)
 		encoder.Encode(messageResponse)
 
+	} else {
+		err := errors.New(constants.WRONG_REQUEST)
+		return &appError{err, err.Error(), 500}
+	}
+
+	return nil
+}
+
+func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
+	decoder := json.NewDecoder(req.Body)
+	var msg json.RawMessage
+	fullMsg := protocol.CompleteMessage{
+		Content: &msg,
+	}
+	if err := decoder.Decode(&fullMsg); err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	user, err := models.FindUserByToken(fullMsg.Meta.Token)
+	if err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	if fullMsg.Type == "M" {
+		var getMessagesRequest protocol.GetMessagesRequest
+		json.Unmarshal(msg, &getMessagesRequest)
+
+		messages, err := models.GetNewMessagesForUser(user, getMessagesRequest.LastMessageTimestamp)
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
+
+		var getMessagesResponse protocol.GetMessagesResponse
+		getMessagesResponse.Messages = messages
+
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(getMessagesResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
 		return &appError{err, err.Error(), 500}
@@ -96,9 +134,7 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		encoder := json.NewEncoder(rw)
 		encoder.Encode(connectResponse)
-	}
-
-	if fullMsg.Type == "L" {
+	} else if fullMsg.Type == "L" {
 		var connectRequest protocol.ConnectRequest
 		log.Println("Recieved login request")
 		json.Unmarshal(msg, &connectRequest)
@@ -119,6 +155,9 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		encoder := json.NewEncoder(rw)
 		encoder.Encode(connectResponse)
+	} else {
+		err := errors.New(constants.WRONG_REQUEST)
+		return &appError{err, err.Error(), 500}
 	}
 
 	return nil
@@ -135,6 +174,10 @@ func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 func init() {
 	if _, err := os.Stat(constants.TOKEN_KEY_FILE); os.IsNotExist(err) {
 		tools.GenerateTokenKey()
+	}
+
+	if err := os.Setenv(constants.EDITION_VAR, constants.SERVER_EDITION); err != nil {
+		panic(err)
 	}
 }
 
@@ -165,6 +208,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/register", appHandler(registerHandler))
 	mux.Handle("/send", appHandler(sendHandler))
+	mux.Handle("/messages", appHandler(messagesHandler))
 
 	server := &http.Server{
 		Addr:         ":44333",

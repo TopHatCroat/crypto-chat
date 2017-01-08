@@ -5,7 +5,6 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/database"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
-	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"github.com/dgrijalva/jwt-go"
 	"golang.org/x/crypto/bcrypt"
 	"time"
@@ -47,7 +46,7 @@ func (u *User) LogIn(password string) (string, error) {
 		return "", errors.New(constants.WRONG_CREDS_ERROR)
 	}
 
-	claims := protocol.Claims{
+	claims := Claims{
 		u.Username,
 		jwt.StandardClaims{
 			IssuedAt: time.Now().Unix(),

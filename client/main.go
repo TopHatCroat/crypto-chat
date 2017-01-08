@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"io/ioutil"
@@ -15,13 +17,21 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"bufio"
+	"time"
+	"strconv"
 )
 
 var (
 	registerOption = flag.Bool("register", false, "registers with server using username and password specified")
 	loginOption    = flag.Bool("login", false, "logs in on the server using username and password")
+	newMessages    = make(chan protocol.Message, 1)
 )
+
+func init() {
+	if err := os.Setenv(constants.EDITION_VAR, constants.CLIENT_EDITION); err != nil {
+		panic(err)
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -119,6 +129,8 @@ func main() {
 			fmt.Println(connectResponse.Type)
 		}
 
+		go receiveNewMessages(*client, connectResponse)
+
 		reader := bufio.NewReader(os.Stdin)
 		for true {
 			fmt.Print("Enter text: ")
@@ -128,7 +140,8 @@ func main() {
 			var fullNewMsg protocol.CompleteMessage
 			var messageRequest protocol.Message
 			messageRequest.Content = text
-			messageRequest.Reciever = 0
+			messageRequest.Reciever = 2
+			messageRequest.Timestamp = time.Now().UnixNano()
 
 			fullNewMsg.Type = "S"
 			protocol.ConstructMetaData(&fullNewMsg)
@@ -154,9 +167,42 @@ func main() {
 			}
 		}
 
-
 	}
 
 	//flag.Usage()
 
+}
+
+func receiveNewMessages(client http.Client, connectResponse protocol.ConnectResponse) {
+	timestamp := int64(0)
+	for ;; time.Sleep(1 * time.Second) {
+		var fullNewMsg protocol.CompleteMessage
+		var getMessagesRequest protocol.GetMessagesRequest
+		getMessagesRequest.LastMessageTimestamp = timestamp
+
+		fullNewMsg.Type = "M"
+		protocol.ConstructMetaData(&fullNewMsg)
+		fullNewMsg.Content = getMessagesRequest
+		fullNewMsg.Meta.Token = connectResponse.Token
+		buffer := new(bytes.Buffer)
+		json.NewEncoder(buffer).Encode(fullNewMsg)
+
+		resp, err := client.Post("https://localhost:44333/messages", "application/json", buffer)
+		helpers.HandleError(err)
+
+		var getMessagesResponse protocol.GetMessagesResponse
+		body, err := ioutil.ReadAll(resp.Body)
+		helpers.HandleError(err)
+		err = json.Unmarshal(body, &getMessagesResponse)
+		helpers.HandleError(err)
+
+		if getMessagesResponse.Error != "" {
+			fmt.Println(getMessagesResponse.Error)
+		} else {
+			for _, msg := range getMessagesResponse.Messages {
+				fmt.Println(strconv.Itoa(int(msg.SenderID)) + ": " + msg.Content)
+				timestamp = msg.CreatedAt
+			}
+		}
+	}
 }
