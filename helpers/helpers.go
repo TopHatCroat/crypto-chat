@@ -5,14 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
+	"golang.org/x/crypto/ssh/terminal"
 	"log"
 	"net/http"
 	"os"
-	"fmt"
-	"golang.org/x/crypto/ssh/terminal"
-	"syscall"
 	"strings"
+	"syscall"
 )
 
 func HandleError(err error) {
@@ -35,10 +35,13 @@ func EncodeB64(message []byte) string {
 	return string(base64Text)
 }
 
-func DecodeB64(message string) []byte {
+func DecodeB64(message string) ([]byte, error) {
 	resultSlice := make([]byte, base64.StdEncoding.DecodedLen(len(message)))
-	length, _ := base64.StdEncoding.Decode(resultSlice, []byte(message))
-	return resultSlice[:length]
+	length, err := base64.StdEncoding.Decode(resultSlice, []byte(message))
+	if err != nil {
+		return resultSlice, err
+	}
+	return resultSlice[:length], nil
 }
 
 func ReadFromFile(fileName string) ([]byte, error) {

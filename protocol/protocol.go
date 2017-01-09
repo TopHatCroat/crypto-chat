@@ -2,12 +2,18 @@ package protocol
 
 import (
 	"crypto/rand"
+	"errors"
+	"github.com/TopHatCroat/CryptoChat-server/constants"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"golang.org/x/crypto/nacl/box"
+	"golang.org/x/crypto/nacl/secretbox"
+	"io"
 	"time"
 )
 
 const (
-	KEY_SIZE = 32
+	KEY_SIZE   = 32
+	NONCE_SIZE = 24
 )
 
 type CompleteMessage struct {
@@ -95,4 +101,77 @@ func GenerateAsyncKeyPair() (publicKey, privateKey *[KEY_SIZE]byte, err error) {
 		return nil, nil, err
 	}
 	return publicKey, privateKey, nil
+}
+
+func GenerateNonce() (*[NONCE_SIZE]byte, error) {
+	nonce := new([NONCE_SIZE]byte)
+	_, err := io.ReadFull(rand.Reader, nonce[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return nonce, nil
+}
+
+func Encrypt(privateKey, publicKey, message string) (result string, err error) {
+	keyBytes, err := helpers.DecodeB64(privateKey)
+	if err != nil {
+		return result, err
+	}
+
+	publicKeyBytes, err := helpers.DecodeB64(publicKey)
+	if err != nil {
+		return result, err
+	}
+
+	nonce, err := GenerateNonce()
+	if err != nil {
+		return result, errors.New(constants.GENERATE_NONCE_ERROR)
+	}
+
+	out := make([]byte, len(nonce))
+	copy(out, nonce[:])
+	var keyBytesProper [KEY_SIZE]byte
+	copy(keyBytesProper[:], keyBytes[0:KEY_SIZE])
+	var publicKeyBytesProper [KEY_SIZE]byte
+	copy(publicKeyBytesProper[:], publicKeyBytes[0:KEY_SIZE])
+	out = box.Seal(out, []byte(message), nonce, &publicKeyBytesProper, &keyBytesProper)
+	return helpers.EncodeB64(out), nil
+}
+
+func Decrypt(key, publicKey, message string) (result string, err error) {
+	keyBytes, err := helpers.DecodeB64(key)
+	if err != nil {
+		return result, err
+	}
+	publicKeyBytes, err := helpers.DecodeB64(publicKey)
+	if err != nil {
+		return result, err
+	}
+	if err != nil {
+		return result, err
+	}
+
+	messageByte, err := helpers.DecodeB64(message)
+	if err != nil {
+		return result, err
+	}
+
+	if len(messageByte) < (NONCE_SIZE + secretbox.Overhead) {
+		return result, errors.New(constants.NONCE_ERROR)
+	}
+
+	var nonce [NONCE_SIZE]byte
+	copy(nonce[:], messageByte[:NONCE_SIZE])
+	var out []byte
+	var keyBytesProper [KEY_SIZE]byte
+	copy(keyBytesProper[:], keyBytes[0:KEY_SIZE])
+	var publicKeyBytesProper [KEY_SIZE]byte
+	copy(publicKeyBytesProper[:], publicKeyBytes[0:KEY_SIZE])
+	out, ok := box.Open(nil, messageByte[NONCE_SIZE:], &nonce, &publicKeyBytesProper, &keyBytesProper)
+	if !ok {
+		return result, errors.New(constants.DECRYPT_ERROR)
+	}
+
+	return string(out), nil
 }

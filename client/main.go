@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
@@ -19,7 +20,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"errors"
 )
 
 var (
@@ -27,7 +27,6 @@ var (
 	loginOption       = flag.Bool("l", false, "logs in on the server using username and password")
 	sendOption        = flag.Bool("s", false, "send a message to user")
 	getMessagesOption = flag.Bool("g", false, "send a message to user")
-	newMessages       = make(chan protocol.Message, 1)
 )
 
 func init() {
@@ -160,7 +159,6 @@ func main() {
 		fmt.Print("Enter text: ")
 		text, err := reader.ReadString('\n')
 		helpers.HandleError(err)
-
 		var receiverUserName = flag.Arg(0)
 		//var message = flag.Arg(1)
 
@@ -172,9 +170,19 @@ func main() {
 			}
 		}
 
+		privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
+		if err != nil {
+			panic(err)
+		}
+
+		textEncrypted, err := protocol.Encrypt(privateKey.Value, receiver.PublicKey, text)
+		if err != nil {
+			panic(err)
+		}
+
 		var fullNewMsg protocol.CompleteMessage
 		var messageRequest protocol.Message
-		messageRequest.Content = text
+		messageRequest.Content = textEncrypted
 		messageRequest.Reciever = receiver.APIID
 		messageRequest.Timestamp = time.Now().UnixNano()
 
@@ -240,7 +248,7 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 		return friend, err
 	}
 
-	if 	err = json.Unmarshal(body, &friendResponse); err != nil {
+	if err = json.Unmarshal(body, &friendResponse); err != nil {
 		return friend, err
 	}
 
@@ -248,8 +256,8 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 		return friend, errors.New(friendResponse.Error)
 	} else {
 		friend := models.Friend{
-			APIID: friendResponse.User.APIID,
-			Username: friendResponse.User.Username,
+			APIID:     friendResponse.User.APIID,
+			Username:  friendResponse.User.Username,
 			PublicKey: friendResponse.User.PublicKey}
 
 		if err := friend.Save(); err != nil {
@@ -269,6 +277,11 @@ func receiveNewMessages(client http.Client) {
 		getMessagesRequest.LastMessageTimestamp = timestamp
 
 		token, err := models.GetSetting(constants.TOKEN_KEY)
+		if err != nil {
+			panic(err)
+		}
+
+		privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
 		if err != nil {
 			panic(err)
 		}
@@ -300,7 +313,20 @@ func receiveNewMessages(client http.Client) {
 				fmt.Print(" (")
 				fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
 				fmt.Print("): ")
-				fmt.Print(msg.Content)
+
+				receiver, err := models.FindFriendByCreds(msg.Sender)
+				if err != nil {
+					receiver, err = getFriend(client, msg.Sender)
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				decryptedMessage, err := protocol.Decrypt(privateKey.Value, receiver.PublicKey, msg.Content)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Print(decryptedMessage)
 
 				timestamp = sentAt.UnixNano()
 			}

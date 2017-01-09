@@ -15,7 +15,11 @@ var (
 	MESSAGE_SENT          = "Message sent successfully"
 	PRIVATE_KEY           = "private_key"
 	PUBLIC_KEY            = "public_key"
-	TOKEN_KEY            = "token_key"
+	TOKEN_KEY             = "token_key"
+	GENERATE_NONCE_ERROR  = "Error generating unique key"
+	NONCE_ERROR           = "Error validating unique key"
+	ENCRYPT_ERROR         = "Error encrypting message"
+	DECRYPT_ERROR         = "Error decrypting message"
 
 	SERVER_NAME    = "localhost:44333"
 	TODO_SECRET    = "TODO: secret"
