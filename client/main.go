@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"errors"
 )
 
 var (
@@ -66,6 +67,8 @@ func main() {
 	if *registerOption {
 		userName, password := helpers.GetCredentials()
 		var connectRequest protocol.ConnectRequest
+
+		fmt.Println()
 
 		public, private, err := protocol.GenerateAsyncKeyPair()
 		helpers.HandleError(err)
@@ -115,7 +118,7 @@ func main() {
 	} else if *loginOption {
 		userName, password := helpers.GetCredentials()
 
-		println(userName, password)
+		println()
 		var connectRequest protocol.ConnectRequest
 
 		connectRequest.UserName = userName
@@ -158,10 +161,21 @@ func main() {
 		text, err := reader.ReadString('\n')
 		helpers.HandleError(err)
 
+		var receiverUserName = flag.Arg(0)
+		//var message = flag.Arg(1)
+
+		receiver, err := models.FindFriendByCreds(receiverUserName)
+		if err != nil {
+			receiver, err = getFriend(*client, receiverUserName)
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		var fullNewMsg protocol.CompleteMessage
 		var messageRequest protocol.Message
 		messageRequest.Content = text
-		messageRequest.Reciever = 2
+		messageRequest.Reciever = receiver.APIID
 		messageRequest.Timestamp = time.Now().UnixNano()
 
 		token, err := models.GetSetting(constants.TOKEN_KEY)
@@ -192,9 +206,58 @@ func main() {
 		}
 	} else if *getMessagesOption {
 		receiveNewMessages(*client)
+	} else {
+		flag.Usage()
+	}
+}
+
+func getFriend(client http.Client, friendUserName string) (friend models.Friend, err error) {
+	var fullNewMsg protocol.CompleteMessage
+	var friendRequest protocol.FriendRequest
+
+	token, err := models.GetSetting(constants.TOKEN_KEY)
+	if err != nil {
+		return friend, err
 	}
 
-	//flag.Usage()
+	friendRequest.Username = friendUserName
+
+	fullNewMsg.Type = "U"
+	protocol.ConstructMetaData(&fullNewMsg)
+	fullNewMsg.Content = friendRequest
+	fullNewMsg.Meta.Token = token.Value
+	buffer := new(bytes.Buffer)
+	json.NewEncoder(buffer).Encode(fullNewMsg)
+
+	resp, err := client.Post("https://localhost:44333/user", "application/json", buffer)
+	if err != nil {
+		return friend, err
+	}
+
+	var friendResponse protocol.FriendResponse
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return friend, err
+	}
+
+	if 	err = json.Unmarshal(body, &friendResponse); err != nil {
+		return friend, err
+	}
+
+	if friendResponse.Error != "" {
+		return friend, errors.New(friendResponse.Error)
+	} else {
+		friend := models.Friend{
+			APIID: friendResponse.User.APIID,
+			Username: friendResponse.User.Username,
+			PublicKey: friendResponse.User.PublicKey}
+
+		if err := friend.Save(); err != nil {
+			return friend, err
+		}
+
+		return friend, nil
+	}
 
 }
 

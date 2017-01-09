@@ -45,8 +45,8 @@ func createDatabase(dbName string) {
 	if edition == constants.SERVER_EDITION {
 		db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
 			"password VARCHAR(255), gcm VARCHAR(255) NULL, public_key VARCHAR(257))")
-		db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, " +
-			"reciever_id INTEGER, content TEXT NULL, created_at INTEGER, " +
+		db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER NOT NULL, " +
+			"reciever_id INTEGER NOT NULL, content TEXT NULL, created_at INTEGER NOT NULL, " +
 			"FOREIGN KEY (sender_id) REFERENCES users(id), " +
 			"FOREIGN KEY (reciever_id) REFERENCES users(id) " +
 			")")
@@ -55,8 +55,8 @@ func createDatabase(dbName string) {
 			"FOREIGN KEY (user_id) REFERENCES users(id) " +
 			")")
 	} else if edition == constants.CLIENT_EDITION {
-		db.Exec("CREATE TABLE friends (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
-			"public_key VARCHAR(257))")
+		db.Exec("CREATE TABLE friends (id INTEGER PRIMARY KEY AUTOINCREMENT, api_id INTEGER NOT NULL, " +
+			"username VARCHAR(64) NOT NULL, public_key VARCHAR(257) NOT NULL)")
 		db.Exec("CREATE TABLE settings (key VARCHAR(100) PRIMARY KEY, value TEXT )")
 
 	}

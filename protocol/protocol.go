@@ -28,6 +28,12 @@ type MessageData struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
+type UserData struct {
+	APIID     int64  `json:"api_id"`
+	Username  string `json:"username"`
+	PublicKey string `json:"public_key"`
+}
+
 type Meta struct {
 	SentAt int64  `json:"sent_at"`
 	Hash   string `json:"hash"`
@@ -53,6 +59,15 @@ type GetMessagesRequest struct {
 type GetMessagesResponse struct {
 	Messages []MessageData `json:"messages"`
 	Error    string        `json:"error"`
+}
+
+type FriendRequest struct {
+	Username string `json:"username"`
+}
+
+type FriendResponse struct {
+	User  UserData `json:"user"`
+	Error string   `json:"error"`
 }
 
 type MessageResponse struct {

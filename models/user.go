@@ -34,7 +34,7 @@ func (u *User) Save() int64 {
 	} else {
 		preparedStatement, err := db.Prepare("UPDATE users set username = ?, password = ?, gcm = ?, public_key = ? WHERE id = ?")
 		helpers.HandleError(err)
-		_, err = preparedStatement.Exec(u.Username, u.PasswordDigest, u.Gcm, u.ID, u.PublicKey)
+		_, err = preparedStatement.Exec(u.Username, u.PasswordDigest, u.Gcm, u.PublicKey, u.ID)
 		helpers.HandleError(err)
 	}
 	return u.ID
@@ -127,6 +127,7 @@ func FindUserByCreds(username string) (u User, e error) {
 	err = row.Scan(&u.ID, &u.Username, &u.PasswordDigest, &u.Gcm, &u.PublicKey)
 	defer row.Close()
 	if err != nil {
+		//TODO: we are returning a wrong error here in case it's a friend request and not a regular user querry
 		return u, errors.New(constants.WRONG_CREDS_ERROR)
 	}
 	return u, nil

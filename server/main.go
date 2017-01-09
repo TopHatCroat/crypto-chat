@@ -108,6 +108,45 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	return nil
 }
 
+func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
+	decoder := json.NewDecoder(req.Body)
+	var msg json.RawMessage
+	fullMsg := protocol.CompleteMessage{
+		Content: &msg,
+	}
+	if err := decoder.Decode(&fullMsg); err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	_, err := models.FindUserByToken(fullMsg.Meta.Token)
+	if err != nil {
+		return &appError{err, err.Error(), 500}
+	}
+
+	if fullMsg.Type == "U" {
+		var friendRequest protocol.FriendRequest
+		json.Unmarshal(msg, &friendRequest)
+
+		user, err := models.FindUserByCreds(friendRequest.Username)
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
+
+		var friendResponse protocol.FriendResponse
+		friendResponse.User.APIID = user.ID
+		friendResponse.User.Username = user.Username
+		friendResponse.User.PublicKey = user.PublicKey
+
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(friendResponse)
+	} else {
+		err := errors.New(constants.WRONG_REQUEST)
+		return &appError{err, err.Error(), 500}
+	}
+
+	return nil
+}
+
 func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	decoder := json.NewDecoder(req.Body)
 	var msg json.RawMessage
@@ -209,6 +248,7 @@ func main() {
 	mux.Handle("/register", appHandler(registerHandler))
 	mux.Handle("/send", appHandler(sendHandler))
 	mux.Handle("/messages", appHandler(messagesHandler))
+	mux.Handle("/user", appHandler(userHandler))
 
 	server := &http.Server{
 		Addr:         ":44333",
