@@ -15,14 +15,37 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
-type appHandler func(http.ResponseWriter, *http.Request) *appError
+type AppHandler func(http.ResponseWriter, *http.Request) *appError
 
 type appError struct {
 	Error   error
 	Message string
 	Code    int
+}
+
+func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	log := models.Log{
+		SourceAddr: req.RemoteAddr,
+		Params:     req.RequestURI,
+		Method:     req.Method,
+		Cipher:     req.TLS.CipherSuite,
+		Timestamp:  time.Now().UnixNano(),
+	}
+
+	if err := log.Log(); err != nil {
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
+		return
+	}
+
+	if err := fn(rw, req); err != nil {
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(map[string]string{"error": err.Message})
+		//http.Error(rw, err.Message, err.Code)
+	}
 }
 
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
@@ -202,14 +225,6 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	return nil
 }
 
-func (fn appHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if err := fn(rw, req); err != nil {
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(map[string]string{"error": err.Message})
-		//http.Error(rw, err.Message, err.Code)
-	}
-}
-
 func init() {
 	if _, err := os.Stat(constants.TOKEN_KEY_FILE); os.IsNotExist(err) {
 		tools.GenerateTokenKey()
@@ -245,10 +260,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/register", appHandler(registerHandler))
-	mux.Handle("/send", appHandler(sendHandler))
-	mux.Handle("/messages", appHandler(messagesHandler))
-	mux.Handle("/user", appHandler(userHandler))
+	mux.Handle("/register", AppHandler(registerHandler))
+	mux.Handle("/send", AppHandler(sendHandler))
+	mux.Handle("/messages", AppHandler(messagesHandler))
+	mux.Handle("/user", AppHandler(userHandler))
 
 	server := &http.Server{
 		Addr:         ":44333",

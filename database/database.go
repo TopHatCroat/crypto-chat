@@ -54,6 +54,9 @@ func createDatabase(dbName string) {
 			"login_time INTEGER NOT NULL, last_seen_time INTEGER NOT NULL, " +
 			"FOREIGN KEY (user_id) REFERENCES users(id) " +
 			")")
+		db.Exec("CREATE TABLE log (id INTEGER PRIMARY KEY AUTOINCREMENT, source_addr VARCHAR(45) NOT NULL, " +
+			"params VARCHAR(128) NOT NULL, method VARCHAR(10) NOT NULL, cipher INTEGER NOT NULL, timestamp INTEGER NOT NULL " +
+			")")
 	} else if edition == constants.CLIENT_EDITION {
 		db.Exec("CREATE TABLE friends (id INTEGER PRIMARY KEY AUTOINCREMENT, api_id INTEGER NOT NULL, " +
 			"username VARCHAR(64) NOT NULL, public_key VARCHAR(257) NOT NULL)")

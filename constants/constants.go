@@ -20,6 +20,7 @@ var (
 	NONCE_ERROR           = "Error validating unique key"
 	ENCRYPT_ERROR         = "Error encrypting message"
 	DECRYPT_ERROR         = "Error decrypting message"
+	REQUEST_REJECTED      = "Request rejected"
 
 	SERVER_NAME    = "localhost:44333"
 	TODO_SECRET    = "TODO: secret"
