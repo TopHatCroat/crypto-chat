@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 	"io"
 	"time"
+	"encoding/json"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 
 type CompleteMessage struct {
 	Type    string      `json:"type"`
-	Content interface{} `json:"content"`
+	Content *json.RawMessage `json:"content"`
 	Meta    Meta        `json:"metadata"`
 }
 

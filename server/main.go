@@ -16,9 +16,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"github.com/gorilla/context"
 )
 
 type AppHandler func(http.ResponseWriter, *http.Request) *appError
+
+type Adapter func(http.Handler) http.Handler
 
 type appError struct {
 	Error   error
@@ -26,20 +29,53 @@ type appError struct {
 	Code    int
 }
 
-func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	log := models.Log{
-		SourceAddr: req.RemoteAddr,
-		Params:     req.RequestURI,
-		Method:     req.Method,
-		Cipher:     req.TLS.CipherSuite,
-		Timestamp:  time.Now().UnixNano(),
-	}
+func Logger(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		log := models.Log{
+			SourceAddr: req.RemoteAddr,
+			Params:     req.RequestURI,
+			Method:     req.Method,
+			Cipher:     req.TLS.CipherSuite,
+			Timestamp:  time.Now().UnixNano(),
+		}
 
-	if err := log.Log(); err != nil {
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
-		return
-	}
+		if err := log.Log(); err != nil {
+			encoder := json.NewEncoder(rw)
+			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
+			return
+		}
+
+		handler.ServeHTTP(rw, req)
+
+		log.TimeRequest()
+
+		if err := GetError(req); err != nil {
+			encoder := json.NewEncoder(rw)
+			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
+			return
+		}
+	})
+}
+
+func JSONDecoder(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		decoder := json.NewDecoder(req.Body)
+		//var msg json.RawMessage
+		fullMsg := protocol.CompleteMessage{
+			//Content: &msg,
+		}
+		if err := decoder.Decode(&fullMsg); err != nil {
+			context.Set(req, "err", err)
+			return
+		}
+
+		context.Set(req, "json", fullMsg)
+
+		handler.ServeHTTP(rw, req)
+	})
+}
+
+func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if err := fn(rw, req); err != nil {
 		encoder := json.NewEncoder(rw)
@@ -48,15 +84,22 @@ func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func GetJSON(r *http.Request) protocol.CompleteMessage {
+	if rv := context.Get(r, "json"); rv != nil {
+		return rv.(protocol.CompleteMessage)
+	}
+	return protocol.CompleteMessage{}
+}
+
+func GetError(r *http.Request) error {
+	if rv := context.Get(r, "err"); rv != nil {
+		return rv.(error)
+	}
+	return nil
+}
+
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
-	decoder := json.NewDecoder(req.Body)
-	var msg json.RawMessage
-	fullMsg := protocol.CompleteMessage{
-		Content: &msg,
-	}
-	if err := decoder.Decode(&fullMsg); err != nil {
-		return &appError{err, err.Error(), 500}
-	}
+	fullMsg := GetJSON(req)
 
 	user, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
@@ -66,7 +109,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	if fullMsg.Type == "S" {
 		var messageRequest protocol.Message
 		log.Println("Recieved message request")
-		json.Unmarshal(msg, &messageRequest)
+		json.Unmarshal(*fullMsg.Content, &messageRequest)
 
 		message := &models.Message{
 			RecieverID: int64(messageRequest.Reciever),
@@ -95,14 +138,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 }
 
 func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
-	decoder := json.NewDecoder(req.Body)
-	var msg json.RawMessage
-	fullMsg := protocol.CompleteMessage{
-		Content: &msg,
-	}
-	if err := decoder.Decode(&fullMsg); err != nil {
-		return &appError{err, err.Error(), 500}
-	}
+	fullMsg := GetJSON(req)
 
 	user, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
@@ -111,7 +147,7 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 	if fullMsg.Type == "M" {
 		var getMessagesRequest protocol.GetMessagesRequest
-		json.Unmarshal(msg, &getMessagesRequest)
+		json.Unmarshal(*fullMsg.Content, &getMessagesRequest)
 
 		messages, err := models.GetNewMessagesForUser(user, getMessagesRequest.LastMessageTimestamp)
 		if err != nil {
@@ -132,14 +168,7 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 }
 
 func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
-	decoder := json.NewDecoder(req.Body)
-	var msg json.RawMessage
-	fullMsg := protocol.CompleteMessage{
-		Content: &msg,
-	}
-	if err := decoder.Decode(&fullMsg); err != nil {
-		return &appError{err, err.Error(), 500}
-	}
+	fullMsg := GetJSON(req)
 
 	_, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
@@ -148,7 +177,7 @@ func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 	if fullMsg.Type == "U" {
 		var friendRequest protocol.FriendRequest
-		json.Unmarshal(msg, &friendRequest)
+		json.Unmarshal(*fullMsg.Content, &friendRequest)
 
 		user, err := models.FindUserByCreds(friendRequest.Username)
 		if err != nil {
@@ -171,19 +200,11 @@ func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 }
 
 func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
-	decoder := json.NewDecoder(req.Body)
-	var msg json.RawMessage
-	fullMsg := protocol.CompleteMessage{
-		Content: &msg,
-	}
-	if err := decoder.Decode(&fullMsg); err != nil {
-		return &appError{err, err.Error(), 500}
-	}
-
+	fullMsg := GetJSON(req)
 	if fullMsg.Type == "R" {
 		var connectRequest protocol.ConnectRequest
 		log.Println("Recieved register request")
-		json.Unmarshal(msg, &connectRequest)
+		json.Unmarshal(*fullMsg.Content, &connectRequest)
 		var user models.User
 		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password, connectRequest.PublicKey)
 		if err != nil {
@@ -199,7 +220,7 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	} else if fullMsg.Type == "L" {
 		var connectRequest protocol.ConnectRequest
 		log.Println("Recieved login request")
-		json.Unmarshal(msg, &connectRequest)
+		json.Unmarshal(*fullMsg.Content, &connectRequest)
 		var user models.User
 		user, err := models.FindUserByCreds(connectRequest.UserName)
 		if err != nil {
@@ -260,10 +281,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/register", AppHandler(registerHandler))
-	mux.Handle("/send", AppHandler(sendHandler))
-	mux.Handle("/messages", AppHandler(messagesHandler))
-	mux.Handle("/user", AppHandler(userHandler))
+	mux.Handle("/register", Logger(JSONDecoder(AppHandler(registerHandler))))
+	mux.Handle("/send", Logger(JSONDecoder(AppHandler(sendHandler))))
+	mux.Handle("/messages", Logger(JSONDecoder(AppHandler(messagesHandler))))
+	mux.Handle("/user", Logger(JSONDecoder(AppHandler(userHandler))))
 
 	server := &http.Server{
 		Addr:         ":44333",

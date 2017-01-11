@@ -1,6 +1,9 @@
 package models
 
-import "github.com/TopHatCroat/CryptoChat-server/database"
+import (
+	"github.com/TopHatCroat/CryptoChat-server/database"
+	"time"
+)
 
 type Log struct {
 	ID         int64
@@ -23,6 +26,24 @@ func (log *Log) Log() (err error) {
 		return err
 	}
 	log.ID, _ = result.LastInsertId()
+
+	return nil
+}
+
+func (log *Log) TimeRequest() (err error) {
+	db := database.GetDatabase()
+
+	preparedStatement, err := db.Prepare("UPDATE log SET request_time = ? WHERE id = ?")
+	if err != nil {
+		return err
+	}
+
+	currentTime := time.Now().UnixNano()
+
+	_, err = preparedStatement.Exec(currentTime - log.Timestamp, log.ID)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
