@@ -92,12 +92,11 @@ func main() {
 		connectRequest.UserName = userName
 		connectRequest.Password = password
 		connectRequest.PublicKey = publicKey.Value
-		var fullMsg protocol.CompleteMessage
-		fullMsg.Type = "R"
-		protocol.ConstructMetaData(&fullMsg)
-		fullMsg.Content = connectRequest
-		buffer := new(bytes.Buffer)
-		json.NewEncoder(buffer).Encode(fullMsg)
+
+		buffer, err := buildRequestWithToken("R", connectRequest, nil)
+		if err != nil {
+			panic(err)
+		}
 
 		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
 		//defer resp.Close()
@@ -123,12 +122,10 @@ func main() {
 		connectRequest.UserName = userName
 		connectRequest.Password = password
 
-		var fullMsg protocol.CompleteMessage
-		fullMsg.Type = "L"
-		protocol.ConstructMetaData(&fullMsg)
-		fullMsg.Content = connectRequest
-		buffer := new(bytes.Buffer)
-		json.NewEncoder(buffer).Encode(fullMsg)
+		buffer, err := buildRequestWithToken("L", connectRequest, nil)
+		if err != nil {
+			panic(err)
+		}
 
 		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
 		//defer resp.Close()
@@ -180,7 +177,6 @@ func main() {
 			panic(err)
 		}
 
-		var fullNewMsg protocol.CompleteMessage
 		var messageRequest protocol.Message
 		messageRequest.Content = textEncrypted
 		messageRequest.Reciever = receiver.APIID
@@ -191,12 +187,10 @@ func main() {
 			panic(err)
 		}
 
-		fullNewMsg.Type = "S"
-		protocol.ConstructMetaData(&fullNewMsg)
-		fullNewMsg.Content = messageRequest
-		fullNewMsg.Meta.Token = token.Value
-		buffer := new(bytes.Buffer)
-		json.NewEncoder(buffer).Encode(fullNewMsg)
+		buffer, err := buildRequestWithToken("S", &messageRequest, &token.Value)
+		if err != nil {
+			panic(err)
+		}
 
 		resp, err := client.Post("https://localhost:44333/send", "application/json", buffer)
 		helpers.HandleError(err)
@@ -219,8 +213,22 @@ func main() {
 	}
 }
 
+func buildRequestWithToken(typ string, message interface{}, token *string) (*bytes.Buffer, error) {
+	var fullNewMsg protocol.CompleteMessageInterface
+	fullNewMsg.Type = typ
+	protocol.ConstructMetaData(&fullNewMsg)
+	fullNewMsg.Content = message
+	if token != nil {
+		fullNewMsg.Meta.Token = *token
+	}
+	buffer := new(bytes.Buffer)
+	if err := json.NewEncoder(buffer).Encode(fullNewMsg); err != nil {
+		return buffer, err
+	}
+	return buffer, nil
+}
+
 func getFriend(client http.Client, friendUserName string) (friend models.Friend, err error) {
-	var fullNewMsg protocol.CompleteMessage
 	var friendRequest protocol.FriendRequest
 
 	token, err := models.GetSetting(constants.TOKEN_KEY)
@@ -230,12 +238,10 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 
 	friendRequest.Username = friendUserName
 
-	fullNewMsg.Type = "U"
-	protocol.ConstructMetaData(&fullNewMsg)
-	fullNewMsg.Content = friendRequest
-	fullNewMsg.Meta.Token = token.Value
-	buffer := new(bytes.Buffer)
-	json.NewEncoder(buffer).Encode(fullNewMsg)
+	buffer, err := buildRequestWithToken("U", friendRequest, &token.Value)
+	if err != nil {
+		panic(err)
+	}
 
 	resp, err := client.Post("https://localhost:44333/user", "application/json", buffer)
 	if err != nil {
@@ -266,13 +272,11 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 
 		return friend, nil
 	}
-
 }
 
 func receiveNewMessages(client http.Client) {
 	timestamp := int64(0)
 	for ; ; time.Sleep(1 * time.Second) {
-		var fullNewMsg protocol.CompleteMessage
 		var getMessagesRequest protocol.GetMessagesRequest
 		getMessagesRequest.LastMessageTimestamp = timestamp
 
@@ -286,12 +290,10 @@ func receiveNewMessages(client http.Client) {
 			panic(err)
 		}
 
-		fullNewMsg.Type = "M"
-		protocol.ConstructMetaData(&fullNewMsg)
-		fullNewMsg.Content = getMessagesRequest
-		fullNewMsg.Meta.Token = token.Value
-		buffer := new(bytes.Buffer)
-		json.NewEncoder(buffer).Encode(fullNewMsg)
+		buffer, err := buildRequestWithToken("M", getMessagesRequest, &token.Value)
+		if err != nil {
+			panic(err)
+		}
 
 		resp, err := client.Post("https://localhost:44333/messages", "application/json", buffer)
 		helpers.HandleError(err)

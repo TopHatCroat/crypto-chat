@@ -23,6 +23,12 @@ type CompleteMessage struct {
 	Meta    Meta        `json:"metadata"`
 }
 
+type CompleteMessageInterface struct {
+	Type    string      `json:"type"`
+	Content interface{} `json:"content"`
+	Meta    Meta        `json:"metadata"`
+}
+
 type Message struct {
 	Reciever  int64  `json:"reciever"`
 	Content   string `json:"content"`
@@ -91,7 +97,7 @@ func ResolveRequest(data []byte) (returnData []byte, err error) {
 	return data, err
 }
 
-func ConstructMetaData(fullMsg *CompleteMessage) {
+func ConstructMetaData(fullMsg *CompleteMessageInterface) {
 	timeStamp := time.Now()
 	fullMsg.Meta.SentAt = timeStamp.UnixNano()
 }
