@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
@@ -9,7 +10,6 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 	"io"
 	"time"
-	"encoding/json"
 )
 
 const (
@@ -18,9 +18,9 @@ const (
 )
 
 type CompleteMessage struct {
-	Type    string      `json:"type"`
+	Type    string           `json:"type"`
 	Content *json.RawMessage `json:"content"`
-	Meta    Meta        `json:"metadata"`
+	Meta    Meta             `json:"metadata"`
 }
 
 type CompleteMessageInterface struct {
