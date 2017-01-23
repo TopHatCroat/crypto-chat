@@ -10,13 +10,13 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"github.com/TopHatCroat/CryptoChat-server/tools"
+	"github.com/gorilla/context"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"github.com/gorilla/context"
 )
 
 type AppHandler func(http.ResponseWriter, *http.Request) *appError
@@ -40,8 +40,7 @@ func Logger(handler http.Handler) http.Handler {
 		}
 
 		if err := log.Log(); err != nil {
-			encoder := json.NewEncoder(rw)
-			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
+			Respond(rw, map[string]string{"error": constants.REQUEST_REJECTED})
 			return
 		}
 
@@ -50,8 +49,7 @@ func Logger(handler http.Handler) http.Handler {
 		log.TimeRequest()
 
 		if err := GetError(req); err != nil {
-			encoder := json.NewEncoder(rw)
-			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
+			Respond(rw, map[string]string{"error": constants.REQUEST_REJECTED})
 			return
 		}
 	})
@@ -62,7 +60,7 @@ func JSONDecoder(handler http.Handler) http.Handler {
 		decoder := json.NewDecoder(req.Body)
 		//var msg json.RawMessage
 		fullMsg := protocol.CompleteMessage{
-			//Content: &msg,
+		//Content: &msg,
 		}
 		if err := decoder.Decode(&fullMsg); err != nil {
 			context.Set(req, "err", err)
@@ -76,11 +74,8 @@ func JSONDecoder(handler http.Handler) http.Handler {
 }
 
 func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-
 	if err := fn(rw, req); err != nil {
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(map[string]string{"error": err.Message})
-		//http.Error(rw, err.Message, err.Code)
+		Respond(rw, map[string]string{"error": err.Message})
 	}
 }
 
@@ -96,6 +91,11 @@ func GetError(r *http.Request) error {
 		return rv.(error)
 	}
 	return nil
+}
+
+func Respond(rw http.ResponseWriter, data interface{}) {
+	encoder := json.NewEncoder(rw)
+	encoder.Encode(data)
 }
 
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
@@ -125,10 +125,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		var messageResponse protocol.MessageResponse
 		messageResponse.Message = constants.MESSAGE_SENT
-
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(messageResponse)
-
+		Respond(rw, messageResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
 		return &appError{err, err.Error(), 500}
@@ -157,8 +154,7 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		var getMessagesResponse protocol.GetMessagesResponse
 		getMessagesResponse.Messages = messages
 
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(getMessagesResponse)
+		Respond(rw, getMessagesResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
 		return &appError{err, err.Error(), 500}
@@ -189,8 +185,7 @@ func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		friendResponse.User.Username = user.Username
 		friendResponse.User.PublicKey = user.PublicKey
 
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(friendResponse)
+		Respond(rw, friendResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
 		return &appError{err, err.Error(), 500}
@@ -214,9 +209,8 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.REGISTER_SUCCESS
 		connectResponse.Token = user.Username
+		Respond(rw, connectResponse)
 
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(connectResponse)
 	} else if fullMsg.Type == "L" {
 		var connectRequest protocol.ConnectRequest
 		log.Println("Recieved login request")
@@ -235,9 +229,8 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.LOGIN_SUCCESS
 		connectResponse.Token = userToken
+		Respond(rw, connectResponse)
 
-		encoder := json.NewEncoder(rw)
-		encoder.Encode(connectResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
 		return &appError{err, err.Error(), 500}
