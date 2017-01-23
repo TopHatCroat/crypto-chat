@@ -14,6 +14,7 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/models"
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -26,7 +27,7 @@ var (
 	registerOption    = flag.Bool("r", false, "registers with server using username and password specified")
 	loginOption       = flag.Bool("l", false, "logs in on the server using username and password")
 	sendOption        = flag.Bool("s", false, "send a message to user")
-	getMessagesOption = flag.Bool("g", false, "send a message to user")
+	getMessagesOption = flag.Bool("g", false, "[username], get all new messages")
 )
 
 func init() {
@@ -50,6 +51,20 @@ func main() {
 		os.Exit(0)
 	}()
 
+	if *registerOption {
+		register()
+	} else if *loginOption {
+		login()
+	} else if *sendOption {
+		send()
+	} else if *getMessagesOption {
+		receiveNewMessages()
+	} else {
+		flag.Usage()
+	}
+}
+
+func SecureSend(path string, buffer io.Reader, destination interface{}) {
 	rootCertificates := x509.NewCertPool()
 	certificate, err := helpers.ReadFromFile("server.cert")
 	helpers.HandleError(err)
@@ -63,154 +78,13 @@ func main() {
 	transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
 	client := &http.Client{Transport: transportLayer}
 
-	if *registerOption {
-		userName, password := helpers.GetCredentials()
-		var connectRequest protocol.ConnectRequest
+	resp, err := client.Post("https://localhost:44333/"+path, "application/json", buffer)
+	helpers.HandleError(err)
 
-		fmt.Println()
-
-		public, private, err := protocol.GenerateAsyncKeyPair()
-		helpers.HandleError(err)
-
-		var privateKey models.Setting
-		var publicKey models.Setting
-
-		privateKey.Key = constants.PRIVATE_KEY
-		privateKey.Value = helpers.EncodeB64(private[:])
-		err = privateKey.Save()
-		if err != nil {
-			panic(err)
-		}
-
-		publicKey.Key = constants.PUBLIC_KEY
-		publicKey.Value = helpers.EncodeB64(public[:])
-		err = publicKey.Save()
-		if err != nil {
-			panic(err)
-		}
-
-		connectRequest.UserName = userName
-		connectRequest.Password = password
-		connectRequest.PublicKey = publicKey.Value
-
-		buffer, err := buildRequestWithToken("R", connectRequest, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
-		//defer resp.Close()
-		helpers.HandleError(err)
-
-		var connectResponse protocol.ConnectResponse
-		body, err := ioutil.ReadAll(resp.Body)
-		helpers.HandleError(err)
-		err = json.Unmarshal(body, &connectResponse)
-
-		if connectResponse.Error != "" {
-			fmt.Println(connectResponse.Error)
-		} else {
-			fmt.Println(connectResponse.Type)
-		}
-
-	} else if *loginOption {
-		userName, password := helpers.GetCredentials()
-
-		println()
-		var connectRequest protocol.ConnectRequest
-
-		connectRequest.UserName = userName
-		connectRequest.Password = password
-
-		buffer, err := buildRequestWithToken("L", connectRequest, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		resp, err := client.Post("https://localhost:44333/register", "application/json", buffer)
-		//defer resp.Close()
-		helpers.HandleError(err)
-
-		var connectResponse protocol.ConnectResponse
-		body, err := ioutil.ReadAll(resp.Body)
-		helpers.HandleError(err)
-		err = json.Unmarshal(body, &connectResponse)
-		helpers.HandleError(err)
-
-		if connectResponse.Error != "" {
-			fmt.Println(connectResponse.Error)
-			panic(connectResponse.Error)
-		} else {
-			fmt.Println(connectResponse.Type)
-		}
-
-		var token models.Setting
-		token.Key = constants.TOKEN_KEY
-		token.Value = connectResponse.Token
-		err = token.Save()
-		if err != nil {
-			panic(err)
-		}
-	} else if *sendOption {
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("Enter text: ")
-		text, err := reader.ReadString('\n')
-		helpers.HandleError(err)
-		var receiverUserName = flag.Arg(0)
-		//var message = flag.Arg(1)
-
-		receiver, err := models.FindFriendByCreds(receiverUserName)
-		if err != nil {
-			receiver, err = getFriend(*client, receiverUserName)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
-		if err != nil {
-			panic(err)
-		}
-
-		textEncrypted, err := protocol.Encrypt(privateKey.Value, receiver.PublicKey, text)
-		if err != nil {
-			panic(err)
-		}
-
-		var messageRequest protocol.Message
-		messageRequest.Content = textEncrypted
-		messageRequest.Reciever = receiver.APIID
-		messageRequest.Timestamp = time.Now().UnixNano()
-
-		token, err := models.GetSetting(constants.TOKEN_KEY)
-		if err != nil {
-			panic(err)
-		}
-
-		buffer, err := buildRequestWithToken("S", &messageRequest, &token.Value)
-		if err != nil {
-			panic(err)
-		}
-
-		resp, err := client.Post("https://localhost:44333/send", "application/json", buffer)
-		helpers.HandleError(err)
-
-		var messageResponse protocol.MessageResponse
-		body, err := ioutil.ReadAll(resp.Body)
-		helpers.HandleError(err)
-		err = json.Unmarshal(body, &messageResponse)
-		helpers.HandleError(err)
-
-		if messageResponse.Error != "" {
-			fmt.Println(messageResponse.Error)
-		} else {
-			fmt.Println(messageResponse.Message)
-		}
-	} else if *getMessagesOption {
-		receiveNewMessages(*client)
-	} else {
-		flag.Usage()
-	}
+	body, err := ioutil.ReadAll(resp.Body)
+	helpers.HandleError(err)
+	err = json.Unmarshal(body, &destination)
+	helpers.HandleError(err)
 }
 
 func buildRequestWithToken(typ string, message interface{}, token *string) (*bytes.Buffer, error) {
@@ -228,7 +102,7 @@ func buildRequestWithToken(typ string, message interface{}, token *string) (*byt
 	return buffer, nil
 }
 
-func getFriend(client http.Client, friendUserName string) (friend models.Friend, err error) {
+func getFriend(friendUserName string) (friend models.Friend, err error) {
 	var friendRequest protocol.FriendRequest
 
 	token, err := models.GetSetting(constants.TOKEN_KEY)
@@ -243,20 +117,8 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 		panic(err)
 	}
 
-	resp, err := client.Post("https://localhost:44333/user", "application/json", buffer)
-	if err != nil {
-		return friend, err
-	}
-
-	var friendResponse protocol.FriendResponse
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return friend, err
-	}
-
-	if err = json.Unmarshal(body, &friendResponse); err != nil {
-		return friend, err
-	}
+	friendResponse := &protocol.FriendResponse{}
+	SecureSend("user", buffer, friendResponse)
 
 	if friendResponse.Error != "" {
 		return friend, errors.New(friendResponse.Error)
@@ -274,7 +136,39 @@ func getFriend(client http.Client, friendUserName string) (friend models.Friend,
 	}
 }
 
-func receiveNewMessages(client http.Client) {
+func login() {
+	userName, password := helpers.GetCredentials()
+
+	var connectRequest protocol.ConnectRequest
+
+	connectRequest.UserName = userName
+	connectRequest.Password = password
+
+	buffer, err := buildRequestWithToken("L", connectRequest, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	connectResponse := &protocol.ConnectResponse{}
+	SecureSend("register", buffer, connectResponse)
+
+	if connectResponse.Error != "" {
+		fmt.Println(connectResponse.Error)
+		panic(connectResponse.Error)
+	} else {
+		fmt.Println(connectResponse.Type)
+	}
+
+	var token models.Setting
+	token.Key = constants.TOKEN_KEY
+	token.Value = connectResponse.Token
+	err = token.Save()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func receiveNewMessages() {
 	timestamp := int64(0)
 	for ; ; time.Sleep(1 * time.Second) {
 		var getMessagesRequest protocol.GetMessagesRequest
@@ -295,14 +189,8 @@ func receiveNewMessages(client http.Client) {
 			panic(err)
 		}
 
-		resp, err := client.Post("https://localhost:44333/messages", "application/json", buffer)
-		helpers.HandleError(err)
-
-		var getMessagesResponse protocol.GetMessagesResponse
-		body, err := ioutil.ReadAll(resp.Body)
-		helpers.HandleError(err)
-		err = json.Unmarshal(body, &getMessagesResponse)
-		helpers.HandleError(err)
+		getMessagesResponse := &protocol.GetMessagesResponse{}
+		SecureSend("messages", buffer, getMessagesResponse)
 
 		if getMessagesResponse.Error != "" {
 			fmt.Println(getMessagesResponse.Error)
@@ -318,7 +206,7 @@ func receiveNewMessages(client http.Client) {
 
 				receiver, err := models.FindFriendByCreds(msg.Sender)
 				if err != nil {
-					receiver, err = getFriend(client, msg.Sender)
+					receiver, err = getFriend(msg.Sender)
 					if err != nil {
 						panic(err)
 					}
@@ -333,5 +221,103 @@ func receiveNewMessages(client http.Client) {
 				timestamp = sentAt.UnixNano()
 			}
 		}
+	}
+}
+
+func register() {
+	userName, password := helpers.GetCredentials()
+	var connectRequest protocol.ConnectRequest
+
+	public, private, err := protocol.GenerateAsyncKeyPair()
+	helpers.HandleError(err)
+
+	var privateKey models.Setting
+	var publicKey models.Setting
+
+	privateKey.Key = constants.PRIVATE_KEY
+	privateKey.Value = helpers.EncodeB64(private[:])
+	err = privateKey.Save()
+	if err != nil {
+		panic(err)
+	}
+
+	publicKey.Key = constants.PUBLIC_KEY
+	publicKey.Value = helpers.EncodeB64(public[:])
+	err = publicKey.Save()
+	if err != nil {
+		panic(err)
+	}
+
+	connectRequest.UserName = userName
+	connectRequest.Password = password
+	connectRequest.PublicKey = publicKey.Value
+
+	buffer, err := buildRequestWithToken("R", connectRequest, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	connectResponse := &protocol.ConnectResponse{}
+	SecureSend("register", buffer, connectResponse)
+
+	if connectResponse.Error != "" {
+		fmt.Println(connectResponse.Error)
+	} else {
+		fmt.Println(connectResponse.Type)
+	}
+}
+
+func send() {
+	var receiverUserName = flag.Arg(0)
+	if receiverUserName == "" {
+		flag.Usage()
+		return
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter text: ")
+	text, err := reader.ReadString('\n')
+	helpers.HandleError(err)
+
+	receiver, err := models.FindFriendByCreds(receiverUserName)
+	if err != nil {
+		receiver, err = getFriend(receiverUserName)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
+	if err != nil {
+		panic(err)
+	}
+
+	textEncrypted, err := protocol.Encrypt(privateKey.Value, receiver.PublicKey, text)
+	if err != nil {
+		panic(err)
+	}
+
+	var messageRequest protocol.Message
+	messageRequest.Content = textEncrypted
+	messageRequest.Reciever = receiver.APIID
+	messageRequest.Timestamp = time.Now().UnixNano()
+
+	token, err := models.GetSetting(constants.TOKEN_KEY)
+	if err != nil {
+		panic(err)
+	}
+
+	buffer, err := buildRequestWithToken("S", &messageRequest, &token.Value)
+	if err != nil {
+		panic(err)
+	}
+
+	messageResponse := &protocol.MessageResponse{}
+	SecureSend("send", buffer, messageResponse)
+
+	if messageResponse.Error != "" {
+		fmt.Println(messageResponse.Error)
+	} else {
+		fmt.Println(messageResponse.Message)
 	}
 }
