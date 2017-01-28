@@ -112,7 +112,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		json.Unmarshal(*fullMsg.Content, &messageRequest)
 
 		message := &models.Message{
-			RecieverID: int64(messageRequest.Reciever),
+			RecieverID: int64(messageRequest.Receiver),
 			SenderID:   user.ID,
 			Content:    messageRequest.Content,
 			CreatedAt:  messageRequest.Timestamp,

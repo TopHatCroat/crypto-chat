@@ -21,6 +21,7 @@ var (
 	ENCRYPT_ERROR         = "Error encrypting message"
 	DECRYPT_ERROR         = "Error decrypting message"
 	REQUEST_REJECTED      = "Request rejected"
+	NO_SUCH_KEY_ERROR     = "Not such key found"
 
 	SERVER_NAME    = "localhost:44333"
 	TODO_SECRET    = "TODO: secret"

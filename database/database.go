@@ -17,6 +17,7 @@ var (
 	once sync.Once
 )
 
+// Tries to access database file only once, if there is no file it will create it
 func GetDatabase() *sql.DB {
 	once.Do(func() {
 		if file, err := os.Stat(DATABASE_PATH); (file != nil && file.Size() < 10) || os.IsNotExist(err) {
@@ -46,7 +47,7 @@ func createDatabase(dbName string) {
 		db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(64), " +
 			"password VARCHAR(255), gcm VARCHAR(255) NULL, public_key VARCHAR(257))")
 		db.Exec("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER NOT NULL, " +
-			"reciever_id INTEGER NOT NULL, content TEXT NULL, created_at INTEGER NOT NULL, " +
+			"reciever_id INTEGER NOT NULL, content TEXT NULL, key_hash VARCHAR(100) NOT NULL, created_at INTEGER NOT NULL, " +
 			"FOREIGN KEY (sender_id) REFERENCES users(id), " +
 			"FOREIGN KEY (reciever_id) REFERENCES users(id) " +
 			")")
@@ -62,6 +63,10 @@ func createDatabase(dbName string) {
 		db.Exec("CREATE TABLE friends (id INTEGER PRIMARY KEY AUTOINCREMENT, api_id INTEGER NOT NULL, " +
 			"username VARCHAR(64) NOT NULL, public_key VARCHAR(257) NOT NULL)")
 		db.Exec("CREATE TABLE settings (key VARCHAR(100) PRIMARY KEY, value TEXT )")
+		db.Exec("CREATE TABLE keys (id INTEGER PRIMARY KEY AUTOINCREMENT, key VARCHAR(255) NOT NULL, " +
+			"hash VARCHAR(100) NOT NULL, friend_id INTEGER NOT NULL, created_at INTEGER NOT NULL, " +
+			"FOREIGN KEY (friend_id) REFERENCES friends(id) " +
+			")")
 
 	}
 

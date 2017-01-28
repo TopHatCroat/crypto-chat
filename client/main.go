@@ -204,15 +204,20 @@ func receiveNewMessages() {
 				fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
 				fmt.Print("): ")
 
-				receiver, err := models.FindFriendByCreds(msg.Sender)
+				sender, err := models.FindFriendByCreds(msg.Sender)
 				if err != nil {
-					receiver, err = getFriend(msg.Sender)
+					sender, err = getFriend(msg.Sender)
 					if err != nil {
 						panic(err)
 					}
 				}
 
-				decryptedMessage, err := protocol.Decrypt(privateKey.Value, receiver.PublicKey, msg.Content)
+				//decryptKey, err := sender.GetDecyptionKeyByHash(msg.KeyHash)
+				//if err != nil {
+				//	panic(err)
+				//}
+
+				decryptedMessage, err := protocol.Decrypt(privateKey.Value, sender.PublicKey, msg.Content)
 				if err != nil {
 					panic(err)
 				}
@@ -299,7 +304,7 @@ func send() {
 
 	var messageRequest protocol.Message
 	messageRequest.Content = textEncrypted
-	messageRequest.Reciever = receiver.APIID
+	messageRequest.Receiver = receiver.APIID
 	messageRequest.Timestamp = time.Now().UnixNano()
 
 	token, err := models.GetSetting(constants.TOKEN_KEY)

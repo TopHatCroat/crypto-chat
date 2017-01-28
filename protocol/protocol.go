@@ -30,14 +30,16 @@ type CompleteMessageInterface struct {
 }
 
 type Message struct {
-	Reciever  int64  `json:"reciever"`
+	Receiver  int64  `json:"receiver"`
 	Content   string `json:"content"`
+	KeyHash   string `json:"key_hash"`
 	Timestamp int64  `json:"timestamp"`
 }
 
 type MessageData struct {
 	Sender    string `json:"sender"`
 	Content   string `json:"content"`
+	KeyHash   string `json:"key_hash"`
 	Timestamp int64  `json:"timestamp"`
 }
 

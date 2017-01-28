@@ -10,6 +10,7 @@ type Message struct {
 	SenderID   int64
 	RecieverID int64
 	Content    string
+	KeyHash string
 	CreatedAt  int64
 }
 
@@ -17,11 +18,11 @@ func (msg *Message) Save() error {
 	db := database.GetDatabase()
 
 	preparedStatement, err := db.Prepare("INSERT OR REPLACE INTO messages (sender_id, reciever_id," +
-		" content, created_at) VALUES(?,?,?,?)")
+		" content, key_hash, created_at) VALUES(?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
-	_, err = preparedStatement.Exec(msg.SenderID, msg.RecieverID, msg.Content, msg.CreatedAt)
+	_, err = preparedStatement.Exec(msg.SenderID, msg.RecieverID, msg.Content, msg.KeyHash, msg.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -49,7 +50,7 @@ func (msg *Message) Delete() error {
 func GetNewMessagesForUser(user User, timestamp int64) (messages []protocol.MessageData, err error) {
 	db := database.GetDatabase()
 
-	preparedStatement, err := db.Prepare("SELECT users.username, messages.content, messages.created_at " +
+	preparedStatement, err := db.Prepare("SELECT users.username, messages.content, messages.key_hash, messages.created_at " +
 		"FROM messages JOIN users on messages.sender_id = users.id " +
 		"WHERE messages.reciever_id = ? AND messages.created_at > ?")
 	if err != nil {
@@ -63,7 +64,7 @@ func GetNewMessagesForUser(user User, timestamp int64) (messages []protocol.Mess
 
 	for rows.Next() {
 		var message protocol.MessageData
-		rows.Scan(&message.Sender, &message.Content, &message.Timestamp)
+		rows.Scan(&message.Sender, &message.Content, &message.KeyHash, &message.Timestamp)
 		messages = append(messages, message)
 	}
 	rows.Close()

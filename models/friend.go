@@ -54,6 +54,14 @@ func (f *Friend) Delete() (err error) {
 	return nil
 }
 
+func (f *Friend) GetDecyptionKeyByHash(hash string) (key *Key, err error) {
+	key, err = FindKeyByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
 func FindFriendByCreds(username string) (f Friend, e error) {
 	db := database.GetDatabase()
 
