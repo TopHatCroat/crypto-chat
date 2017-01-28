@@ -57,7 +57,7 @@ func (f *Key) Delete() (err error) {
 func FindKeyByHash(hash string) (k *Key, e error) {
 	db := database.GetDatabase()
 
-	preparedStatement, err := db.Prepare("SELECT * FROM friends WHERE username = ? ")
+	preparedStatement, err := db.Prepare("SELECT * FROM keys WHERE hash = ? ")
 	if err != nil {
 		return nil, err
 	}

@@ -85,6 +85,22 @@ type FriendResponse struct {
 	Error string   `json:"error"`
 }
 
+type KeyRequest struct {
+	KeyData
+}
+
+type KeyResponse struct {
+	Status    string `json:"status"`
+	KeyData
+}
+
+type KeyData struct {
+	Key       string `json:"key"`
+	Hash      string `json:"hash"`
+	UserID    int64  `json:"user"`
+	CreatedAt int64  `json:"created_at"`
+}
+
 type MessageResponse struct {
 	Message string `json:"message"`
 	Error   string `json:"error"`

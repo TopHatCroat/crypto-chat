@@ -163,6 +163,61 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	return nil
 }
 
+func keyHandler(rw http.ResponseWriter, req *http.Request) *appError {
+	fullMsg := GetJSON(req)
+
+	_, err := models.FindUserByToken(fullMsg.Meta.Token)
+	if err != nil {
+		return &appError{err, err.Error(), 401}
+	}
+
+	//key submit
+	if fullMsg.Type == "K" {
+		var keyRequest protocol.KeyRequest
+		json.Unmarshal(*fullMsg.Content, &keyRequest)
+
+		key := &models.Key{
+			Key: keyRequest.Key,
+			Hash: keyRequest.Hash,
+			FriendID: keyRequest.UserID,
+			CreatedAt: keyRequest.CreatedAt,
+		}
+
+		err := key.Save()
+		if err != nil {
+			return &appError{err, err.Error(), 500}
+		}
+
+		var keyResponse protocol.KeyResponse
+		keyResponse.Status = constants.KEY_SUBMIT_SUCCESS
+		keyResponse.Hash = key.Hash
+
+		Respond(rw, keyResponse)
+	} else if fullMsg.Type == "KR" {
+		var keyRequest protocol.KeyRequest
+		json.Unmarshal(*fullMsg.Content, &keyRequest)
+
+		key, err := models.FindKeyByHash(keyRequest.Hash)
+		if err != nil {
+			return &appError{err, err.Error(), 400}
+		}
+
+		var keyResponse protocol.KeyResponse
+		keyResponse.Status = constants.KEY_FOUND_SUCCESS
+		keyResponse.Key = key.Key
+		keyResponse.Hash = key.Hash
+		keyResponse.UserID = key.FriendID
+		keyResponse.CreatedAt = key.CreatedAt
+
+		Respond(rw, keyResponse)
+	} else {
+		err := errors.New(constants.WRONG_REQUEST)
+		return &appError{err, err.Error(), 500}
+	}
+
+	return nil
+}
+
 func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 	fullMsg := GetJSON(req)
 
@@ -278,6 +333,7 @@ func main() {
 	mux.Handle("/send", Logger(JSONDecoder(AppHandler(sendHandler))))
 	mux.Handle("/messages", Logger(JSONDecoder(AppHandler(messagesHandler))))
 	mux.Handle("/user", Logger(JSONDecoder(AppHandler(userHandler))))
+	mux.Handler("/keys", Logger(JSONDecoder(AppHandler(keyHandler))))
 
 	server := &http.Server{
 		Addr:         ":44333",

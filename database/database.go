@@ -51,6 +51,10 @@ func createDatabase(dbName string) {
 			"FOREIGN KEY (sender_id) REFERENCES users(id), " +
 			"FOREIGN KEY (reciever_id) REFERENCES users(id) " +
 			")")
+		db.Exec("CREATE TABLE keys (id INTEGER PRIMARY KEY AUTOINCREMENT, key VARCHAR(255) NOT NULL, " +
+			"hash VARCHAR(100) NOT NULL, friend_id INTEGER NOT NULL, created_at INTEGER NOT NULL, " +
+			"FOREIGN KEY (friend_id) REFERENCES friends(id) " +
+			")")
 		db.Exec("CREATE TABLE user_sessions (session_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL, " +
 			"login_time INTEGER NOT NULL, last_seen_time INTEGER NOT NULL, " +
 			"FOREIGN KEY (user_id) REFERENCES users(id) " +
