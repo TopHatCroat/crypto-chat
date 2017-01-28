@@ -179,11 +179,6 @@ func receiveNewMessages() {
 			panic(err)
 		}
 
-		privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
-		if err != nil {
-			panic(err)
-		}
-
 		buffer, err := buildRequestWithToken("M", getMessagesRequest, &token.Value)
 		if err != nil {
 			panic(err)
@@ -204,24 +199,31 @@ func receiveNewMessages() {
 				fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
 				fmt.Print("): ")
 
-				sender, err := models.FindFriendByCreds(msg.Sender)
+				friend, err := models.FindFriendByCreds(msg.Sender)
 				if err != nil {
-					sender, err = getFriend(msg.Sender)
+					friend, err = getFriend(msg.Sender)
 					if err != nil {
 						panic(err)
 					}
 				}
 
-				//decryptKey, err := sender.GetDecyptionKeyByHash(msg.KeyHash)
-				//if err != nil {
-				//	panic(err)
-				//}
+				decryptionKey, err := models.GetValidEncryptionKey(friend)
+				if err != nil {
+					if err.Error() == constants.NO_SUCH_KEY_ERROR {
+						decryptionKey, err = requestKey(&friend, &msg.KeyHash)
+						if err != nil {
+							panic(err)
+						}
+					} else {
+						panic(err)
+					}
+				}
 
-				decryptedMessage, err := protocol.Decrypt(privateKey.Value, sender.PublicKey, msg.Content)
+				decryptedMessage, err := protocol.DecryptMessage(&decryptionKey.Key, &msg.Content)
 				if err != nil {
 					panic(err)
 				}
-				fmt.Print(decryptedMessage)
+				fmt.Print(*decryptedMessage)
 
 				timestamp = sentAt.UnixNano()
 			}
@@ -284,27 +286,39 @@ func send() {
 	text, err := reader.ReadString('\n')
 	helpers.HandleError(err)
 
-	receiver, err := models.FindFriendByCreds(receiverUserName)
+	friend, err := models.FindFriendByCreds(receiverUserName)
 	if err != nil {
-		receiver, err = getFriend(receiverUserName)
+		friend, err = getFriend(receiverUserName)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
+	encryptionKey, err := models.GetValidEncryptionKey(friend)
 	if err != nil {
-		panic(err)
+		if err.Error() == constants.NO_SUCH_KEY_ERROR {
+			encryptionKey, err = models.GenerateEncryptionKey(friend)
+
+			if err != nil {
+				panic(err)
+			}
+
+			err = submitKey(encryptionKey, friend)
+			if err != nil {
+				panic(err)
+			}
+		}
 	}
 
-	textEncrypted, err := protocol.Encrypt(privateKey.Value, receiver.PublicKey, text)
+	textEncrypted, err := protocol.EncryptMessage(&encryptionKey.Key, &text)
 	if err != nil {
 		panic(err)
 	}
 
 	var messageRequest protocol.Message
-	messageRequest.Content = textEncrypted
-	messageRequest.Receiver = receiver.APIID
+	messageRequest.Content = *textEncrypted
+	messageRequest.Receiver = friend.APIID
+	messageRequest.KeyHash = encryptionKey.Hash
 	messageRequest.Timestamp = time.Now().UnixNano()
 
 	token, err := models.GetSetting(constants.TOKEN_KEY)
@@ -325,4 +339,89 @@ func send() {
 	} else {
 		fmt.Println(messageResponse.Message)
 	}
+}
+
+func submitKey(key *models.Key, reciever models.Friend) error {
+
+	privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
+	if err != nil {
+		return err
+	}
+
+	token, err := models.GetSetting(constants.TOKEN_KEY)
+	if err != nil {
+		return err
+	}
+
+	encryptedKey, err := protocol.Encrypt(privateKey.Value, reciever.PublicKey, key.Key)
+	if err != nil {
+		return err
+	}
+
+	var keyRequest protocol.KeyRequest
+	keyRequest.Key = encryptedKey
+	keyRequest.Hash = key.Hash
+	keyRequest.UserID = key.FriendID
+	keyRequest.CreatedAt = key.CreatedAt
+
+	buffer, err := buildRequestWithToken("K", keyRequest, &token.Value)
+	if err != nil {
+		return err
+	}
+
+	keyResponse := &protocol.KeyResponse{}
+	SecureSend("keys", buffer, keyResponse)
+
+	if keyResponse.Error != "" {
+		fmt.Println(keyResponse.Error)
+	} else {
+		fmt.Println(keyResponse.Status)
+	}
+	return nil
+}
+
+func requestKey(friend *models.Friend, keyHash *string) (*models.Key, error) {
+	privateKey, err := models.GetSetting(constants.PRIVATE_KEY)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := models.GetSetting(constants.TOKEN_KEY)
+	if err != nil {
+		return nil, err
+	}
+
+	var keyRequest protocol.KeyRequest
+	keyRequest.Hash = *keyHash
+
+	buffer, err := buildRequestWithToken("KR", keyRequest, &token.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	keyResponse := &protocol.KeyResponse{}
+	SecureSend("keys", buffer, keyResponse)
+
+	decryptedKey, err := protocol.Decrypt(privateKey.Value, friend.PublicKey, keyResponse.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	key := &models.Key{
+		Key:       decryptedKey,
+		Hash:      keyResponse.Hash,
+		FriendID:  friend.ID,
+		CreatedAt: keyResponse.CreatedAt,
+	}
+
+	if err = key.Save(); err != nil {
+		return nil, err
+	}
+
+	if keyResponse.Error != "" {
+		fmt.Println(keyResponse.Error)
+	} else {
+		fmt.Println(keyResponse.Status)
+	}
+	return key, nil
 }

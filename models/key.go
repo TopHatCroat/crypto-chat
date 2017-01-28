@@ -1,9 +1,14 @@
 package models
 
 import (
+	"crypto/rand"
+	"crypto/sha512"
 	"errors"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
 	"github.com/TopHatCroat/CryptoChat-server/database"
+	"github.com/TopHatCroat/CryptoChat-server/helpers"
+	"io"
+	"time"
 )
 
 type Key struct {
@@ -54,7 +59,7 @@ func (f *Key) Delete() (err error) {
 	return nil
 }
 
-func FindKeyByHash(hash string) (k *Key, e error) {
+func FindKeyByHash(hash string) (*Key, error) {
 	db := database.GetDatabase()
 
 	preparedStatement, err := db.Prepare("SELECT * FROM keys WHERE hash = ? ")
@@ -66,11 +71,63 @@ func FindKeyByHash(hash string) (k *Key, e error) {
 		return nil, err
 	}
 
+	var key Key
 	row.Next()
-	err = row.Scan(&k.ID, &k.Key, &k.Hash, &k.FriendID, &k.CreatedAt)
+	err = row.Scan(&key.ID, &key.Key, &key.Hash, &key.FriendID, &key.CreatedAt)
 	defer row.Close()
 	if err != nil {
 		return nil, errors.New(constants.NO_SUCH_KEY_ERROR)
 	}
-	return k, nil
+	return &key, nil
+}
+
+func GetValidEncryptionKey(friend Friend) (*Key, error) {
+	db := database.GetDatabase()
+
+	preparedStatement, err := db.Prepare("SELECT * FROM keys WHERE keys.friend_id = ? ")
+	if err != nil {
+		return nil, err
+	}
+	row, err := preparedStatement.Query(friend.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var key Key
+	row.Next()
+	err = row.Scan(&key.ID, &key.Key, &key.Hash, &key.FriendID, &key.CreatedAt)
+	defer row.Close()
+	if err != nil {
+		return nil, errors.New(constants.NO_SUCH_KEY_ERROR)
+	}
+	return &key, nil
+
+}
+
+func GenerateEncryptionKey(user Friend) (*Key, error) {
+	keyBytes := new([constants.KEY_SIZE]byte)
+
+	_, err := io.ReadFull(rand.Reader, keyBytes[:])
+	if err != nil {
+		return nil, err
+	}
+
+	encodedKey := helpers.EncodeB64(keyBytes[:])
+
+	keyHash := sha512.Sum512([]byte(encodedKey))
+	encodedKeyHash := helpers.EncodeB64(keyHash[:])
+
+	key := &Key{
+		Key:       encodedKey,
+		Hash:      encodedKeyHash,
+		FriendID:  user.ID,
+		CreatedAt: time.Now().UnixNano(),
+	}
+
+	err = key.Save()
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }

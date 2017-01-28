@@ -10,7 +10,7 @@ type Message struct {
 	SenderID   int64
 	RecieverID int64
 	Content    string
-	KeyHash string
+	KeyHash    string
 	CreatedAt  int64
 }
 

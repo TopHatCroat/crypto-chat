@@ -23,7 +23,8 @@ var (
 	REQUEST_REJECTED      = "Request rejected"
 	NO_SUCH_KEY_ERROR     = "Not such key found"
 	KEY_SUBMIT_SUCCESS    = "Key submited successfully"
-	KEY_FOUND_SUCCESS    = "Key found"
+	KEY_FOUND_SUCCESS     = "Key found"
+	INVALID_DECYPT_ERROR  = "Invalid data for decryption"
 
 	SERVER_NAME    = "localhost:44333"
 	TODO_SECRET    = "TODO: secret"
@@ -31,4 +32,9 @@ var (
 	EDITION_VAR    = "SECURECHAT"
 	SERVER_EDITION = "server"
 	CLIENT_EDITION = "client"
+)
+
+const (
+	KEY_SIZE   = 32
+	NONCE_SIZE = 24
 )

@@ -90,8 +90,9 @@ type KeyRequest struct {
 }
 
 type KeyResponse struct {
-	Status    string `json:"status"`
+	Status string `json:"status"`
 	KeyData
+	Error string `json:"error"`
 }
 
 type KeyData struct {
@@ -173,9 +174,6 @@ func Decrypt(key, publicKey, message string) (result string, err error) {
 	if err != nil {
 		return result, err
 	}
-	if err != nil {
-		return result, err
-	}
 
 	messageByte, err := helpers.DecodeB64(message)
 	if err != nil {
@@ -199,4 +197,53 @@ func Decrypt(key, publicKey, message string) (result string, err error) {
 	}
 
 	return string(out), nil
+}
+
+func EncryptMessage(key *string, message *string) (*string, error) {
+	keyBytes, err := helpers.DecodeB64(*key)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce, err := GenerateNonce()
+	if err != nil {
+		return nil, errors.New(constants.ENCRYPT_ERROR)
+	}
+
+	out := make([]byte, len(nonce))
+	copy(out, nonce[:])
+	var keyBytesProper [KEY_SIZE]byte
+	copy(keyBytesProper[:], keyBytes[0:KEY_SIZE])
+	out = secretbox.Seal(out, []byte(*message), nonce, &keyBytesProper)
+
+	result := helpers.EncodeB64(out)
+	return &result, nil
+}
+
+func DecryptMessage(key *string, message *string) (*string, error) {
+	keyBytes, err := helpers.DecodeB64(*key)
+	if err != nil {
+		return nil, err
+	}
+
+	messageByte, err := helpers.DecodeB64(*message)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(messageByte) < (NONCE_SIZE + secretbox.Overhead) {
+		return nil, errors.New(constants.INVALID_DECYPT_ERROR)
+	}
+
+	var nonce [NONCE_SIZE]byte
+	copy(nonce[:], messageByte[:NONCE_SIZE])
+	var keyBytesProper [KEY_SIZE]byte
+	copy(keyBytesProper[:], keyBytes[0:KEY_SIZE])
+	result, ok := secretbox.Open(nil, messageByte[NONCE_SIZE:], &nonce, &keyBytesProper)
+	if !ok {
+		return nil, errors.New(constants.DECRYPT_ERROR)
+	}
+
+	stringResult := string(result)
+	return &stringResult, nil
 }

@@ -112,6 +112,5 @@ func GetCredentials() (string, string) {
 	bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
 	fmt.Println()
 
-
 	return strings.TrimSpace(username), strings.TrimSpace(string(bytePassword))
 }

@@ -115,6 +115,7 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 			RecieverID: int64(messageRequest.Receiver),
 			SenderID:   user.ID,
 			Content:    messageRequest.Content,
+			KeyHash:    messageRequest.KeyHash,
 			CreatedAt:  messageRequest.Timestamp,
 		}
 
@@ -177,9 +178,9 @@ func keyHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		json.Unmarshal(*fullMsg.Content, &keyRequest)
 
 		key := &models.Key{
-			Key: keyRequest.Key,
-			Hash: keyRequest.Hash,
-			FriendID: keyRequest.UserID,
+			Key:       keyRequest.Key,
+			Hash:      keyRequest.Hash,
+			FriendID:  keyRequest.UserID,
 			CreatedAt: keyRequest.CreatedAt,
 		}
 
@@ -333,7 +334,7 @@ func main() {
 	mux.Handle("/send", Logger(JSONDecoder(AppHandler(sendHandler))))
 	mux.Handle("/messages", Logger(JSONDecoder(AppHandler(messagesHandler))))
 	mux.Handle("/user", Logger(JSONDecoder(AppHandler(userHandler))))
-	mux.Handler("/keys", Logger(JSONDecoder(AppHandler(keyHandler))))
+	mux.Handle("/keys", Logger(JSONDecoder(AppHandler(keyHandler))))
 
 	server := &http.Server{
 		Addr:         ":44333",
