@@ -19,14 +19,15 @@ import (
 	"time"
 )
 
-type AppHandler func(http.ResponseWriter, *http.Request) *appError
+type AppHandler func(http.ResponseWriter, *http.Request) *appData
 
 type Adapter func(http.Handler) http.Handler
 
-type appError struct {
-	Error   error
-	Message string
-	Code    int
+type appData struct {
+	Data   interface{}
+	Error  error
+	Status string
+	Code   int
 }
 
 func Logger(handler http.Handler) http.Handler {
@@ -40,7 +41,8 @@ func Logger(handler http.Handler) http.Handler {
 		}
 
 		if err := log.Log(); err != nil {
-			Respond(rw, map[string]string{"error": constants.REQUEST_REJECTED})
+			encoder := json.NewEncoder(rw)
+			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
 			return
 		}
 
@@ -49,7 +51,8 @@ func Logger(handler http.Handler) http.Handler {
 		log.TimeRequest()
 
 		if err := GetError(req); err != nil {
-			Respond(rw, map[string]string{"error": constants.REQUEST_REJECTED})
+			encoder := json.NewEncoder(rw)
+			encoder.Encode(map[string]string{"error": constants.REQUEST_REJECTED})
 			return
 		}
 	})
@@ -74,8 +77,14 @@ func JSONDecoder(handler http.Handler) http.Handler {
 }
 
 func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if err := fn(rw, req); err != nil {
-		Respond(rw, map[string]string{"error": err.Message})
+	data := fn(rw, req)
+
+	if data.Error != nil {
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(map[string]string{"error": data.Error.Error(), "status": data.Status})
+	} else {
+		encoder := json.NewEncoder(rw)
+		encoder.Encode(data.Data)
 	}
 }
 
@@ -93,17 +102,26 @@ func GetError(r *http.Request) error {
 	return nil
 }
 
-func Respond(rw http.ResponseWriter, data interface{}) {
-	encoder := json.NewEncoder(rw)
-	encoder.Encode(data)
+func validResponse(data interface{}) *appData {
+	return &appData{
+		Data: data,
+	}
 }
 
-func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
+func errorResponse(err error, status string, code int) *appData {
+	return &appData{
+		Error:  err,
+		Status: status,
+		Code:   code,
+	}
+}
+
+func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
 
 	user, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
 
 	if fullMsg.Type == "S" {
@@ -121,26 +139,25 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		err := message.Save()
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var messageResponse protocol.MessageResponse
 		messageResponse.Message = constants.MESSAGE_SENT
-		Respond(rw, messageResponse)
+		return validResponse(messageResponse)
+
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
-
-	return nil
 }
 
-func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
+func messagesHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
 
 	user, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
 
 	if fullMsg.Type == "M" {
@@ -149,27 +166,25 @@ func messagesHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		messages, err := models.GetNewMessagesForUser(user, getMessagesRequest.LastMessageTimestamp)
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var getMessagesResponse protocol.GetMessagesResponse
 		getMessagesResponse.Messages = messages
 
-		Respond(rw, getMessagesResponse)
+		return validResponse(getMessagesResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
-
-	return nil
 }
 
-func keyHandler(rw http.ResponseWriter, req *http.Request) *appError {
+func keyHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
 
 	_, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
-		return &appError{err, err.Error(), 401}
+		return errorResponse(err, err.Error(), 500)
 	}
 
 	//key submit
@@ -186,21 +201,21 @@ func keyHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		err := key.Save()
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var keyResponse protocol.KeyResponse
 		keyResponse.Status = constants.KEY_SUBMIT_SUCCESS
 		keyResponse.Hash = key.Hash
 
-		Respond(rw, keyResponse)
+		return validResponse(keyResponse)
 	} else if fullMsg.Type == "KR" {
 		var keyRequest protocol.KeyRequest
 		json.Unmarshal(*fullMsg.Content, &keyRequest)
 
 		key, err := models.FindKeyByHash(keyRequest.Hash)
 		if err != nil {
-			return &appError{err, err.Error(), 400}
+			return errorResponse(err, err.Error(), 400)
 		}
 
 		var keyResponse protocol.KeyResponse
@@ -210,21 +225,19 @@ func keyHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		keyResponse.UserID = key.FriendID
 		keyResponse.CreatedAt = key.CreatedAt
 
-		Respond(rw, keyResponse)
+		return validResponse(keyResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
-
-	return nil
 }
 
-func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
+func userHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
 
 	_, err := models.FindUserByToken(fullMsg.Meta.Token)
 	if err != nil {
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
 
 	if fullMsg.Type == "U" {
@@ -233,7 +246,7 @@ func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 
 		user, err := models.FindUserByCreds(friendRequest.Username)
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var friendResponse protocol.FriendResponse
@@ -241,16 +254,16 @@ func userHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		friendResponse.User.Username = user.Username
 		friendResponse.User.PublicKey = user.PublicKey
 
-		Respond(rw, friendResponse)
+		return validResponse(friendResponse)
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
 
 	return nil
 }
 
-func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
+func registerHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
 	if fullMsg.Type == "R" {
 		var connectRequest protocol.ConnectRequest
@@ -259,13 +272,13 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		var user models.User
 		user, err := models.CreateUser(connectRequest.UserName, connectRequest.Password, connectRequest.PublicKey)
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.REGISTER_SUCCESS
 		connectResponse.Token = user.Username
-		Respond(rw, connectResponse)
+		return validResponse(connectResponse)
 
 	} else if fullMsg.Type == "L" {
 		var connectRequest protocol.ConnectRequest
@@ -274,25 +287,23 @@ func registerHandler(rw http.ResponseWriter, req *http.Request) *appError {
 		var user models.User
 		user, err := models.FindUserByCreds(connectRequest.UserName)
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		userToken, err := user.LogIn(connectRequest.Password)
 		if err != nil {
-			return &appError{err, err.Error(), 500}
+			return errorResponse(err, err.Error(), 500)
 		}
 
 		var connectResponse protocol.ConnectResponse
 		connectResponse.Type = constants.LOGIN_SUCCESS
 		connectResponse.Token = userToken
-		Respond(rw, connectResponse)
+		return validResponse(connectResponse)
 
 	} else {
 		err := errors.New(constants.WRONG_REQUEST)
-		return &appError{err, err.Error(), 500}
+		return errorResponse(err, err.Error(), 500)
 	}
-
-	return nil
 }
 
 func init() {
