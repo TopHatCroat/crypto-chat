@@ -7,6 +7,10 @@ import (
 	"sync"
 	"github.com/TopHatCroat/CryptoChat-server/helpers"
 	"github.com/TopHatCroat/CryptoChat-server/constants"
+	"reflect"
+	"errors"
+	"log"
+	"fmt"
 )
 
 var (
@@ -80,4 +84,74 @@ func createDatabase(dbName string) {
 
 func CloseDatabase() {
 	db.Close()
+}
+
+func create(entity interface{}) {
+	e := reflect.TypeOf(entity)
+
+	sql := "CREATE TABLE " + e.Name() + "("
+
+	for i := 0; i < e.NumField(); i++ {
+		name, err := parseName(e.Field(i))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Name %s\n", *name)
+		sql += " " + *name
+		typ, err := parseType(e.Field(i))
+		if err != nil {
+			log.Fatal(err)
+		}
+		sql += " " + typ
+
+		attr, err := parseAtributes(e.Field(i))
+		if err != nil {
+			log.Fatal(err)
+		}
+		sql += " " + attr
+
+		if i != e.NumField() - 1 {
+			sql += ", "
+		}
+	}
+	sql += ");"
+
+	fmt.Printf("SQL %s\n", sql)
+
+}
+
+func parseAtributes(field reflect.StructField) (string, error) {
+	name := field.Tag.Get("primary")
+	result := ""
+	if name == "true" {
+		result += "PRIMARY KEY AUTOINCREMENT"
+	}
+	return result, nil
+}
+
+func parseType(field reflect.StructField) (string, error) {
+	typ := field.Type.String()
+
+	if typ == "int" || typ == "int32" || typ == "int64" || typ == "uint" || typ == "uint16" {
+		return "INTEGER", nil
+	} else if typ == "string" {
+		len := field.Tag.Get("length")
+		if len == "0" {
+			return "TEXT", nil
+		}
+		if len != "" {
+			return "VARCHAR(" + len + ")", nil
+		}
+		return "VARCHAR(255)", nil
+	}
+
+	return "", errors.New("Field type not supported")
+}
+
+func parseName(field reflect.StructField) (*string, error) {
+	name := field.Tag.Get("name")
+	if name == "" {
+		return nil, errors.New("Field must have 'name' tag")
+	}
+	return &name, nil
 }

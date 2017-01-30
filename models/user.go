@@ -16,11 +16,11 @@ type Entity interface {
 }
 
 type User struct {
-	ID             int64
-	Username       string
-	PasswordDigest string
-	Gcm            string
-	PublicKey      string
+	ID             int64 `name:"id" primary:"true"`
+	Username       string `name:"username"`
+	PasswordDigest string `name:"password"`
+	Gcm            string `name:"gcm"`
+	PublicKey      string `name:"public_key"`
 }
 
 func (u *User) Save() int64 {
