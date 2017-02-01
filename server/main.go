@@ -17,6 +17,17 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"github.com/gorilla/websocket"
+)
+
+var (
+	upgrader  = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+
+	connections = make(chan *websocket.Conn)
+	clients = make(chan *models.User)
 )
 
 type AppHandler func(http.ResponseWriter, *http.Request) *appData
@@ -115,6 +126,31 @@ func errorResponse(err error, status string, code int) *appData {
 		Code:   code,
 	}
 }
+
+func realHandler(rw http.ResponseWriter, req *http.Request) *appData {
+	token := req.URL.Query()
+
+	user, err := models.FindUserByToken(token.Get("token"))
+	if err != nil {
+		return errorResponse(err, err.Error(), 401)
+	}
+
+	ws, err := upgrader.Upgrade(rw, req, nil)
+	if err != nil {
+		if _, ok := err.(websocket.HandshakeError); !ok {
+			log.Println(err)
+		}
+		return errorResponse(err, err.Error(), 401)
+	}
+
+	clients <- &user
+	connections <- ws
+
+
+	return validResponse(&protocol.ConnectResponse{Type:"success"})
+}
+
+
 
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)
@@ -345,6 +381,7 @@ func main() {
 	mux.Handle("/messages", Logger(JSONDecoder(AppHandler(messagesHandler))))
 	mux.Handle("/user", Logger(JSONDecoder(AppHandler(userHandler))))
 	mux.Handle("/keys", Logger(JSONDecoder(AppHandler(keyHandler))))
+	mux.Handle("/real", Logger(AppHandler(realHandler)))
 
 	server := &http.Server{
 		Addr:         ":44333",

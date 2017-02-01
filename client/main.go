@@ -28,6 +28,7 @@ var (
 	loginOption       = flag.Bool("l", false, "logs in on the server using username and password")
 	sendOption        = flag.Bool("s", false, "send a message to user")
 	getMessagesOption = flag.Bool("g", false, "[username], get all new messages")
+	realOption        = flag.Bool("rt", false, "register on realtime chat (testing)")
 )
 
 func init() {
@@ -59,8 +60,12 @@ func main() {
 		send()
 	} else if *getMessagesOption {
 		receiveNewMessages()
+	} else if *realOption {
+		registerReal()
 	} else {
-		flag.Usage()
+		//flag.Usage()
+		login()
+		registerReal()
 	}
 }
 
@@ -79,6 +84,29 @@ func SecureSend(path string, buffer io.Reader, destination interface{}) {
 	client := &http.Client{Transport: transportLayer}
 
 	resp, err := client.Post("https://localhost:44333/"+path, "application/json", buffer)
+	helpers.HandleError(err)
+
+	body, err := ioutil.ReadAll(resp.Body)
+	helpers.HandleError(err)
+	err = json.Unmarshal(body, &destination)
+	helpers.HandleError(err)
+}
+
+func SecureSendGet(path string, token *string, destination interface{}) {
+	rootCertificates := x509.NewCertPool()
+	certificate, err := helpers.ReadFromFile("server.cert")
+	helpers.HandleError(err)
+	ok := rootCertificates.AppendCertsFromPEM(certificate)
+	if !ok {
+		panic("Failed parsing certificate")
+	}
+
+	TLSConfig := &tls.Config{RootCAs: rootCertificates}
+	TLSConfig.BuildNameToCertificate()
+	transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
+	client := &http.Client{Transport: transportLayer}
+
+	resp, err := client.Get("https://localhost:44333/" + path + "?token=" + *token)
 	helpers.HandleError(err)
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -165,6 +193,26 @@ func login() {
 	err = token.Save()
 	if err != nil {
 		panic(err)
+	}
+}
+
+func registerReal() {
+	token, err := models.GetSetting(constants.TOKEN_KEY)
+	if err != nil {
+		panic(err)
+	}
+
+	var connectRequest protocol.ConnectRequest
+	connectRequest.UserName = "Ja"
+
+	connectResponse := &protocol.ConnectResponse{}
+	SecureSendGet("real", &token.Value, connectResponse)
+
+	if connectResponse.Error != "" {
+		fmt.Println(connectResponse.Error)
+		panic(connectResponse.Error)
+	} else {
+		fmt.Println(connectResponse.Type)
 	}
 }
 
