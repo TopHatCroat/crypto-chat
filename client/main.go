@@ -101,12 +101,19 @@ func SecureSendGet(path string, token *string, destination interface{}) {
 		panic("Failed parsing certificate")
 	}
 
-	TLSConfig := &tls.Config{RootCAs: rootCertificates}
+	TLSConfig := &tls.Config{RootCAs: rootCertificates, }
 	TLSConfig.BuildNameToCertificate()
 	transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
 	client := &http.Client{Transport: transportLayer}
 
-	resp, err := client.Get("https://localhost:44333/" + path + "?token=" + *token)
+	req, err := http.NewRequest("GET", "https://localhost:44333/" + path + "?token=" + *token, nil)
+
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-Websocket-Version", "13")
+	req.Header.Set("Sec-Websocket-Key", helpers.EncodeB64([]byte("get me in")))
+	req.Header.Set("Connection", "upgrade")
+
+	resp, err := client.Do(req)
 	helpers.HandleError(err)
 
 	body, err := ioutil.ReadAll(resp.Body)

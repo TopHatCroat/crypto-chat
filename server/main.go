@@ -11,24 +11,34 @@ import (
 	"github.com/TopHatCroat/CryptoChat-server/protocol"
 	"github.com/TopHatCroat/CryptoChat-server/tools"
 	"github.com/gorilla/context"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	"github.com/gorilla/websocket"
 )
 
 var (
-	upgrader  = websocket.Upgrader{
+	upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 
 	connections = make(chan *websocket.Conn)
-	clients = make(chan *models.User)
+	users       = make(chan *models.User)
 )
+
+type Client struct {
+	models.User
+	pool *ClientPool
+	send chan protocol.CompleteMessageInterface
+}
+
+type ClientPool struct {
+	Clients map[*Client]bool
+}
 
 type AppHandler func(http.ResponseWriter, *http.Request) *appData
 
@@ -143,14 +153,11 @@ func realHandler(rw http.ResponseWriter, req *http.Request) *appData {
 		return errorResponse(err, err.Error(), 401)
 	}
 
-	clients <- &user
+	users <- &user
 	connections <- ws
 
-
-	return validResponse(&protocol.ConnectResponse{Type:"success"})
+	return validResponse(&protocol.ConnectResponse{Type: "success"})
 }
-
-
 
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	fullMsg := GetJSON(req)

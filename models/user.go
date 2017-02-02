@@ -174,7 +174,7 @@ func FindUserByToken(token string) (user User, err error) {
 		return user, errors.New(constants.INVALID_TOKEN)
 	}
 
-	if userSession.LastSeenTime < time.Now().Add(-1*time.Minute).UnixNano() ||
+	if userSession.LastSeenTime < time.Now().Add(-1*time.Hour).UnixNano() ||
 		userSession.LoginTime < time.Now().Add(-1*time.Hour).UnixNano() {
 		return user, errors.New(constants.OLD_TOKEN)
 	}
