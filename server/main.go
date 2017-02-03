@@ -28,17 +28,8 @@ var (
 
 	connections = make(chan *websocket.Conn)
 	users       = make(chan *models.User)
+	clientPool  = protocol.NewClientPool()
 )
-
-type Client struct {
-	models.User
-	pool *ClientPool
-	send chan protocol.CompleteMessageInterface
-}
-
-type ClientPool struct {
-	Clients map[*Client]bool
-}
 
 type AppHandler func(http.ResponseWriter, *http.Request) *appData
 
@@ -99,6 +90,9 @@ func JSONDecoder(handler http.Handler) http.Handler {
 
 func (fn AppHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	data := fn(rw, req)
+	if data == nil {
+		return
+	}
 
 	if data.Error != nil {
 		encoder := json.NewEncoder(rw)
@@ -153,10 +147,19 @@ func realHandler(rw http.ResponseWriter, req *http.Request) *appData {
 		return errorResponse(err, err.Error(), 401)
 	}
 
-	users <- &user
-	connections <- ws
+	client := &protocol.Client{
+		UserID: user.ID,
+		Pool: clientPool,
+		Conn: ws,
+		Send: make(chan protocol.Message),
+	}
 
-	return validResponse(&protocol.ConnectResponse{Type: "success"})
+	clientPool.Register <- client
+
+	go client.SendContent()
+	client.ReceiveContent()
+	//return validResponse(&protocol.ConnectResponse{Type: "success"})
+	return nil
 }
 
 func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
@@ -180,6 +183,9 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
 		}
 
 		err := message.Save()
+
+		clientPool.Message <- &messageRequest
+
 		if err != nil {
 			return errorResponse(err, err.Error(), 500)
 		}
@@ -369,6 +375,8 @@ func main() {
 		fmt.Println("SecureChat server closed...")
 		os.Exit(0)
 	}()
+
+	go clientPool.Start()
 
 	configuration := &tls.Config{
 		MinVersion:               tls.VersionTLS12,

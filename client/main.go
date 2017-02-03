@@ -21,6 +21,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"github.com/gorilla/websocket"
+	"log"
 )
 
 var (
@@ -64,7 +66,7 @@ func main() {
 		registerReal()
 	} else {
 		//flag.Usage()
-		login()
+		//login()
 		registerReal()
 	}
 }
@@ -92,7 +94,7 @@ func SecureSend(path string, buffer io.Reader, destination interface{}) {
 	helpers.HandleError(err)
 }
 
-func SecureSendGet(path string, token *string, destination interface{}) {
+func SecureSendGet(path string, token *string) {
 	rootCertificates := x509.NewCertPool()
 	certificate, err := helpers.ReadFromFile("server.cert")
 	helpers.HandleError(err)
@@ -103,23 +105,67 @@ func SecureSendGet(path string, token *string, destination interface{}) {
 
 	TLSConfig := &tls.Config{RootCAs: rootCertificates, }
 	TLSConfig.BuildNameToCertificate()
-	transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
-	client := &http.Client{Transport: transportLayer}
+	//transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
+	//client := &http.Client{Transport: transportLayer}
 
-	req, err := http.NewRequest("GET", "https://localhost:44333/" + path + "?token=" + *token, nil)
+	//req, err := http.NewRequest("GET", "https://localhost:44333/" + path + "?token=" + *token, nil)
 
-	req.Header.Set("Upgrade", "websocket")
-	req.Header.Set("Sec-Websocket-Version", "13")
-	req.Header.Set("Sec-Websocket-Key", helpers.EncodeB64([]byte("get me in")))
-	req.Header.Set("Connection", "upgrade")
+	//header := &http.Header{}
+	//
+	//header.Set("Upgrade", "websocket")
+	//header.Set("Sec-Websocket-Version", "13")
+	//header.Set("Sec-Websocket-Key", helpers.EncodeB64([]byte("get me in")))
+	//header.Set("Connection", "upgrade")
 
-	resp, err := client.Do(req)
-	helpers.HandleError(err)
+	dialer := websocket.Dialer{
+		TLSClientConfig:TLSConfig,
+	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	helpers.HandleError(err)
-	err = json.Unmarshal(body, &destination)
-	helpers.HandleError(err)
+	conn, res, err := dialer.Dial("wss://localhost:44333/" + path + "?token=" + *token, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	fmt.Printf("%s \n", res)
+
+	go func() {
+
+		for {
+			var message protocol.Message
+			err := conn.ReadJSON(&message)
+			if err != nil {
+				log.Println("websocket read: ", err)
+				return
+			}
+			log.Printf("rescv: %s", message.Content)
+		}
+	}()
+
+
+	conn.SetReadDeadline(time.Now().Add(protocol.PongWait))
+	conn.SetPingHandler(func(string) error {
+		conn.SetWriteDeadline(time.Now().Add(protocol.PongWait))
+		return nil
+	})
+
+	ticker := time.NewTicker(protocol.PingPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case t := <-ticker.C:
+			json := protocol.StatusUpdate{Message: "all good" + t.String()}
+			err := conn.WriteJSON(json)
+			if err != nil{
+				panic(err)
+			}
+		}
+	}
+
+	//
+	//_ , err = client.Do(req)
+	//helpers.HandleError(err)
+
 }
 
 func buildRequestWithToken(typ string, message interface{}, token *string) (*bytes.Buffer, error) {
@@ -212,15 +258,8 @@ func registerReal() {
 	var connectRequest protocol.ConnectRequest
 	connectRequest.UserName = "Ja"
 
-	connectResponse := &protocol.ConnectResponse{}
-	SecureSendGet("real", &token.Value, connectResponse)
+	SecureSendGet("real", &token.Value)
 
-	if connectResponse.Error != "" {
-		fmt.Println(connectResponse.Error)
-		panic(connectResponse.Error)
-	} else {
-		fmt.Println(connectResponse.Type)
-	}
 }
 
 func receiveNewMessages() {

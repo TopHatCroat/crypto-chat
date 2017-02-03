@@ -103,12 +103,16 @@ type KeyData struct {
 }
 
 type MessageResponse struct {
-	Message string `json:"message"`
+	Message string `json:"Message"`
 	Error   string `json:"error"`
 }
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type StatusUpdate struct {
+	Message string `json:"msg"`
 }
 
 func ResolveRequest(data []byte) (returnData []byte, err error) {
