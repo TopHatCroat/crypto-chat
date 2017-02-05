@@ -2,8 +2,8 @@ package protocol
 
 import (
 	"github.com/gorilla/websocket"
-	"time"
 	"log"
+	"time"
 )
 
 const (
@@ -18,10 +18,10 @@ const (
 )
 
 type Client struct {
-	UserID int64
-	Pool   *ClientPool
-	Conn   *websocket.Conn
-	Send   chan Message
+	ID   int64
+	Pool *ClientPool
+	Conn *websocket.Conn
+	Send chan MessageData
 }
 
 func (c *Client) ReceiveContent() {
@@ -61,12 +61,14 @@ func (c *Client) SendContent() {
 		select {
 		case message, ok := <-c.Send:
 			if !ok {
-				c.Conn.WriteJSON(StatusUpdate{Message:"not working bro"}) //websocket.CloseMessage
+				c.Conn.WriteJSON(StatusUpdate{Message: "not working bro"}) //websocket.CloseMessage
 			}
+
 			err := c.Conn.WriteJSON(message)
 			if err != nil {
 				log.Printf("sdn err: %s \n", err)
-				c.Conn.WriteJSON(StatusUpdate{Message:"not working bro 2"})
+				c.Conn.WriteJSON(StatusUpdate{Message: "not working bro 2"})
+				return
 			}
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(WriteWait))
@@ -81,7 +83,7 @@ type ClientPool struct {
 	clients    map[*Client]bool
 	Register   chan *Client
 	Unregister chan *Client
-	Message    chan *Message
+	Message    chan *MessageData
 }
 
 func (cp *ClientPool) Start() {
@@ -95,7 +97,7 @@ func (cp *ClientPool) Start() {
 				close(client.Send)
 			}
 		case message := <-cp.Message:
-			if client := cp.findClient(message.Receiver); client != nil {
+			if client := cp.findClient(message.RecieverID); client != nil {
 				client.Send <- *message
 			}
 		}
@@ -104,7 +106,7 @@ func (cp *ClientPool) Start() {
 
 func NewClientPool() *ClientPool {
 	return &ClientPool{
-		Message:    make(chan *Message, 10),
+		Message:    make(chan *MessageData, 10),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
@@ -113,7 +115,8 @@ func NewClientPool() *ClientPool {
 
 func (cp *ClientPool) findClient(id int64) *Client {
 	for client := range cp.clients {
-		if client.UserID == id {
+		log.Println(client.ID, id)
+		if client.ID == id {
 			return client
 		}
 	}

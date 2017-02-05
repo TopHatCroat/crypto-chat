@@ -62,6 +62,25 @@ func (f *Friend) GetDecyptionKeyByHash(hash string) (key *Key, err error) {
 	return key, nil
 }
 
+func FindFriendByAPIID(id int64) (f Friend, e error) {
+	db := database.GetDatabase()
+
+	preparedStatement, err := db.Prepare("SELECT * FROM friends WHERE api_id = ? ")
+	helpers.HandleError(err)
+	row, err := preparedStatement.Query(id)
+	if err != nil {
+		return f, err
+	}
+
+	row.Next()
+	err = row.Scan(&f.ID, &f.APIID, &f.Username, &f.PublicKey)
+	defer row.Close()
+	if err != nil {
+		return f, errors.New(constants.NO_SUCH_USER_ERROR)
+	}
+	return f, nil
+}
+
 func FindFriendByCreds(username string) (f Friend, e error) {
 	db := database.GetDatabase()
 

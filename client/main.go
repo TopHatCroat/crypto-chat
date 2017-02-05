@@ -64,12 +64,9 @@ func main() {
 		send()
 	} else if *getMessagesOption {
 		receiveNewMessages()
-	} else if *realOption {
-		registerReal()
 	} else {
 		//flag.Usage()
 		//login()
-		registerReal()
 	}
 }
 
@@ -96,7 +93,7 @@ func SecureSend(path string, buffer io.Reader, destination interface{}) {
 	helpers.HandleError(err)
 }
 
-func SecureSendGet(path string, token *string) {
+func CreateWSConn(path string, token *string) {
 	rootCertificates := x509.NewCertPool()
 	certificate, err := helpers.ReadFromFile("server.cert")
 	helpers.HandleError(err)
@@ -112,24 +109,23 @@ func SecureSendGet(path string, token *string) {
 		TLSClientConfig:TLSConfig,
 	}
 
-	conn, res, err := dialer.Dial("wss://localhost:44333/" + path + "?token=" + *token, nil)
+	conn, _, err := dialer.Dial("wss://localhost:44333/" + path + "?token=" + *token, nil)
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
-	fmt.Printf("%s \n", res)
 
 	go func() {
 
 		for {
-			var message protocol.Message
+			var message protocol.MessageData
 			err := conn.ReadJSON(&message)
 			if err != nil {
 				log.Println("websocket read: ", err)
 				return
 			}
 
-			log.Printf("rescv: %s", message.Content)
+			printMessage(&message)
 		}
 	}()
 
@@ -240,19 +236,6 @@ func login() {
 	}
 }
 
-func registerReal() {
-	token, err := models.GetSetting(constants.TOKEN_KEY)
-	if err != nil {
-		panic(err)
-	}
-
-	var connectRequest protocol.ConnectRequest
-	connectRequest.UserName = "Ja"
-
-	SecureSendGet("real", &token.Value)
-
-}
-
 func receiveNewMessages() {
 	timestamp := int64(0)
 	for ; ; time.Sleep(1 * time.Second) {
@@ -277,43 +260,48 @@ func receiveNewMessages() {
 			panic(err)
 		} else {
 			for _, msg := range getMessagesResponse.Messages {
-				sentAt := time.Unix(0, msg.Timestamp)
-
-				fmt.Print(msg.Sender)
-				fmt.Print(" (")
-				fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
-				fmt.Print("): ")
-
-				friend, err := models.FindFriendByCreds(msg.Sender)
-				if err != nil {
-					friend, err = getFriend(msg.Sender)
-					if err != nil {
-						panic(err)
-					}
-				}
-
-				decryptionKey, err := models.GetValidEncryptionKey(friend)
-				if err != nil {
-					if err.Error() == constants.NO_SUCH_KEY_ERROR {
-						decryptionKey, err = requestKey(&friend, &msg.KeyHash)
-						if err != nil {
-							panic(err)
-						}
-					} else {
-						panic(err)
-					}
-				}
-
-				decryptedMessage, err := protocol.DecryptMessage(&decryptionKey.Key, &msg.Content)
-				if err != nil {
-					panic(err)
-				}
-				fmt.Print(*decryptedMessage)
-
-				timestamp = sentAt.UnixNano()
+				printMessage(&msg)
 			}
 		}
+
+		CreateWSConn("real", &token.Value)
 	}
+}
+
+func printMessage(msg *protocol.MessageData) {
+	sentAt := time.Unix(0, msg.Timestamp)
+	fmt.Print(msg.Sender)
+	fmt.Print(" (")
+	fmt.Print(sentAt.Format("2006-01-02 15:04:05"))
+	fmt.Print("): ")
+
+	friend, err := models.FindFriendByCreds(msg.Sender)
+	if err != nil {
+		friend, err = getFriend(msg.Sender)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	decryptionKey, err := models.GetValidEncryptionKey(friend)
+	if err != nil {
+		if err.Error() == constants.NO_SUCH_KEY_ERROR {
+			decryptionKey, err = requestKey(&friend, &msg.KeyHash)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			panic(err)
+		}
+	}
+
+	decryptedMessage, err := protocol.DecryptMessage(&decryptionKey.Key, &msg.Content)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(*decryptedMessage)
+
+	//timestamp = sentAt.UnixNano()
 }
 
 func register() {

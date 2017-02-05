@@ -148,10 +148,10 @@ func realHandler(rw http.ResponseWriter, req *http.Request) *appData {
 	}
 
 	client := &protocol.Client{
-		UserID: user.ID,
+		ID:   user.ID,
 		Pool: clientPool,
 		Conn: ws,
-		Send: make(chan protocol.Message),
+		Send: make(chan protocol.MessageData),
 	}
 
 	clientPool.Register <- client
@@ -182,9 +182,18 @@ func sendHandler(rw http.ResponseWriter, req *http.Request) *appData {
 			CreatedAt:  messageRequest.Timestamp,
 		}
 
-		err := message.Save()
+		err = message.Save()
+		if err != nil {
+			return errorResponse(err, err.Error(), 500)
+		}
 
-		clientPool.Message <- &messageRequest
+		clientPool.Message <- &protocol.MessageData{
+			Sender:     user.Username,
+			Content:    message.Content,
+			KeyHash:    message.KeyHash,
+			Timestamp:  message.CreatedAt,
+			RecieverID: int64(messageRequest.Receiver),
+		}
 
 		if err != nil {
 			return errorResponse(err, err.Error(), 500)

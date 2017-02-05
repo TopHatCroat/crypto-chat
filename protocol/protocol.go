@@ -37,10 +37,11 @@ type Message struct {
 }
 
 type MessageData struct {
-	Sender    string `json:"sender"`
-	Content   string `json:"content"`
-	KeyHash   string `json:"key_hash"`
-	Timestamp int64  `json:"timestamp"`
+	Sender     string `json:"sender"`
+	Content    string `json:"content"`
+	KeyHash    string `json:"key_hash"`
+	Timestamp  int64  `json:"timestamp"`
+	RecieverID int64  `json:"reciever_id"`
 }
 
 type UserData struct {
