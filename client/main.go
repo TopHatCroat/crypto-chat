@@ -31,6 +31,8 @@ var (
 	sendOption        = flag.Bool("s", false, "send a message to user")
 	getMessagesOption = flag.Bool("g", false, "[username], get all new messages")
 	realOption        = flag.Bool("rt", false, "register on realtime chat (testing)")
+
+	sigs chan os.Signal
 )
 
 func init() {
@@ -43,7 +45,7 @@ func main() {
 	flag.Parse()
 	database.GetDatabase()
 
-	sigs := make(chan os.Signal, 1)
+	sigs = make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigs
@@ -105,17 +107,6 @@ func SecureSendGet(path string, token *string) {
 
 	TLSConfig := &tls.Config{RootCAs: rootCertificates, }
 	TLSConfig.BuildNameToCertificate()
-	//transportLayer := &http.Transport{TLSClientConfig: TLSConfig}
-	//client := &http.Client{Transport: transportLayer}
-
-	//req, err := http.NewRequest("GET", "https://localhost:44333/" + path + "?token=" + *token, nil)
-
-	//header := &http.Header{}
-	//
-	//header.Set("Upgrade", "websocket")
-	//header.Set("Sec-Websocket-Version", "13")
-	//header.Set("Sec-Websocket-Key", helpers.EncodeB64([]byte("get me in")))
-	//header.Set("Connection", "upgrade")
 
 	dialer := websocket.Dialer{
 		TLSClientConfig:TLSConfig,
@@ -137,34 +128,34 @@ func SecureSendGet(path string, token *string) {
 				log.Println("websocket read: ", err)
 				return
 			}
+
 			log.Printf("rescv: %s", message.Content)
 		}
 	}()
 
 
-	conn.SetReadDeadline(time.Now().Add(protocol.PongWait))
-	conn.SetPingHandler(func(string) error {
-		conn.SetWriteDeadline(time.Now().Add(protocol.PongWait))
-		return nil
-	})
-
-	ticker := time.NewTicker(protocol.PingPeriod)
-	defer ticker.Stop()
+	//conn.SetReadDeadline(time.Now().Add(protocol.PongWait))
+	//conn.SetPingHandler(func(string) error {
+	//	conn.SetReadDeadline(time.Now().Add(protocol.PongWait))
+	//	return nil
+	//})
+	//
+	//ticker := time.NewTicker(protocol.PingPeriod)
+	//defer ticker.Stop()
 
 	for {
 		select {
-		case t := <-ticker.C:
-			json := protocol.StatusUpdate{Message: "all good" + t.String()}
-			err := conn.WriteJSON(json)
-			if err != nil{
-				panic(err)
+		case <-sigs:
+			log.Println("interrupt")
+			// To cleanly close a connection, a client should send a close
+			// frame and wait for the server to close the connection.
+			err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			if err != nil {
+				log.Println("write close:", err)
+				return
 			}
 		}
 	}
-
-	//
-	//_ , err = client.Do(req)
-	//helpers.HandleError(err)
 
 }
 

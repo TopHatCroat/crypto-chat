@@ -8,7 +8,7 @@ import (
 
 const (
 	// Time allowed to write a message to the peer.
-	WriteWait = 1 * time.Second
+	WriteWait = 10 * time.Second
 	// Time allowed to read the next pong message from the peer.
 	PongWait = 6 * time.Second
 	// Send pings to peer with this period. Must be less than PongWait.
@@ -63,14 +63,14 @@ func (c *Client) SendContent() {
 			if !ok {
 				c.Conn.WriteJSON(StatusUpdate{Message:"not working bro"}) //websocket.CloseMessage
 			}
-
 			err := c.Conn.WriteJSON(message)
 			if err != nil {
+				log.Printf("sdn err: %s \n", err)
 				c.Conn.WriteJSON(StatusUpdate{Message:"not working bro 2"})
 			}
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(WriteWait))
-			if err := c.Conn.WriteJSON(&StatusUpdate{Message:"ping"}); err != nil {
+			if err := c.Conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 		}
